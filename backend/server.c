@@ -349,7 +349,11 @@ int main() {
     printf("Waiting for connections...\n");
 
     while ((client_socket = accept(server_socket, (struct sockaddr*)&client_addr, &addr_size))) {
-        new_sock = malloc(1);
+        new_sock = malloc(sizeof(int)); // <--- SỬA THÀNH sizeof(int)
+        if (new_sock == NULL) {
+            perror("Failed to allocate memory for new socket");
+            continue;
+        }
         *new_sock = client_socket;
         if (pthread_create(&thread_id, NULL, handle_client, (void*)new_sock) < 0) {
             perror("Could not create thread");

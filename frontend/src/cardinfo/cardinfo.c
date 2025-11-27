@@ -27,16 +27,16 @@ static void apply_css(GtkWidget *widget, const char *css_data) {
 
 
 static gboolean on_draw_event(GtkWidget *widget, cairo_t *cr, gpointer user_data) {
-    GdkPixbuf *pixbuf = gdk_pixbuf_new_from_file("../assets/images/bg_login.png", NULL);
-    if (pixbuf) {
-        gint width = gtk_widget_get_allocated_width(widget);
-        gint height = gtk_widget_get_allocated_height(widget);
-        GdkPixbuf *scaled_pixbuf = gdk_pixbuf_scale_simple(pixbuf, width, height, GDK_INTERP_BILINEAR);
-        gdk_cairo_set_source_pixbuf(cr, scaled_pixbuf, 0, 0);
-        cairo_paint(cr);
-        g_object_unref(scaled_pixbuf);
-        g_object_unref(pixbuf);
-    }
+    // GdkPixbuf *pixbuf = gdk_pixbuf_new_from_file("../assets/images/bg_login.png", NULL);
+    // if (pixbuf) {
+    //     gint width = gtk_widget_get_allocated_width(widget);
+    //     gint height = gtk_widget_get_allocated_height(widget);
+    //     GdkPixbuf *scaled_pixbuf = gdk_pixbuf_scale_simple(pixbuf, width, height, GDK_INTERP_BILINEAR);
+    //     gdk_cairo_set_source_pixbuf(cr, scaled_pixbuf, 0, 0);
+    //     cairo_paint(cr);
+    //     g_object_unref(scaled_pixbuf);
+    //     g_object_unref(pixbuf);
+    // }
 
     
     double widget_width = gtk_widget_get_allocated_width(widget);

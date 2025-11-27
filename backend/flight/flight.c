@@ -4,8 +4,8 @@
 #include <string.h>
 
 char* join_with_dash(const char* row1, const char* row2, const char* row3) {
-
-    size_t length = strlen(row1) + strlen(row2) + strlen(row3) + 3; 
+    // Tăng kích thước bộ nhớ đệm để chứa đủ các ký tự phân cách " - " và ký tự kết thúc chuỗi
+    size_t length = strlen(row1) + strlen(row2) + strlen(row3) + 7; 
 
     char* result = (char*)malloc(length * sizeof(char));
     if (!result) {
@@ -15,9 +15,6 @@ char* join_with_dash(const char* row1, const char* row2, const char* row3) {
     snprintf(result, length, "%s - %s - %s", row1, row2, row3);
     return result;
 }
-
-
-  
 
 int fetch_flights(Flight **flights, int *count) {
     MYSQL *conn = connect_db();
@@ -49,14 +46,39 @@ int fetch_flights(Flight **flights, int *count) {
 
     for (int i = 0; i < num_rows; i++) {
         MYSQL_ROW row = mysql_fetch_row(res);
+        
+        // Sao chép dữ liệu và đảm bảo có ký tự kết thúc chuỗi
         strncpy((*flights)[i].flight_id, row[0], sizeof((*flights)[i].flight_id) - 1);
+        (*flights)[i].flight_id[sizeof((*flights)[i].flight_id) - 1] = '\0';
+
         strncpy((*flights)[i].departure_time, row[3], sizeof((*flights)[i].departure_time) - 1);
-        (*flights)[i].duration_minutes= atoi(row[4]);
-        (*flights)[i].capacity= atoi(row[10]);
-        (*flights)[i].price= atoi(row[11]);
+        (*flights)[i].departure_time[sizeof((*flights)[i].departure_time) - 1] = '\0';
+
+        // Kiểm tra NULL trước khi dùng atoi để tránh Segmentation Fault
+        (*flights)[i].duration_minutes = (row[4] != NULL) ? atoi(row[4]) : 0;
+        
+        // Sửa lại thứ tự cột: row[10] là Price, row[11] là Capacity
+        (*flights)[i].price = (row[10] != NULL) ? atoi(row[10]) : 0; 
+        (*flights)[i].capacity = (row[11] != NULL) ? atoi(row[11]) : 0; 
+
         strncpy((*flights)[i].airplane_name, row[13], sizeof((*flights)[i].airplane_name) - 1);
-        strncpy((*flights)[i].departure_airport, join_with_dash(row[17], row[18], row[19]), sizeof((*flights)[i].departure_airport) - 1);
-        strncpy((*flights)[i].arrival_airport, join_with_dash(row[20], row[21], row[22]), sizeof((*flights)[i].arrival_airport) - 1);
+        (*flights)[i].airplane_name[sizeof((*flights)[i].airplane_name) - 1] = '\0';
+
+        // Xử lý chuỗi ghép và giải phóng bộ nhớ để tránh Memory Leak
+        char *dep_airport = join_with_dash(row[17], row[18], row[19]);
+        if (dep_airport) {
+            strncpy((*flights)[i].departure_airport, dep_airport, sizeof((*flights)[i].departure_airport) - 1);
+            (*flights)[i].departure_airport[sizeof((*flights)[i].departure_airport) - 1] = '\0';
+            free(dep_airport); // Quan trọng: Giải phóng bộ nhớ sau khi dùng
+        }
+
+        char *arr_airport = join_with_dash(row[20], row[21], row[22]);
+        if (arr_airport) {
+            strncpy((*flights)[i].arrival_airport, arr_airport, sizeof((*flights)[i].arrival_airport) - 1);
+            (*flights)[i].arrival_airport[sizeof((*flights)[i].arrival_airport) - 1] = '\0';
+            free(arr_airport); // Quan trọng: Giải phóng bộ nhớ sau khi dùng
+        }
+
         (*flights)[i].available_economy = (*flights)[i].capacity - 30 - get_ticket_count_by_flight_id((*flights)[i].flight_id, "Economy");
         (*flights)[i].available_business= 20 - get_ticket_count_by_flight_id((*flights)[i].flight_id, "Business");
         (*flights)[i].available_first_class = 10 - get_ticket_count_by_flight_id((*flights)[i].flight_id, "First class");
@@ -87,25 +109,29 @@ int get_ticket_count_by_flight_id(const char *flight_id, const char *type) {
 
     if (mysql_query(conn, query)) {
         fprintf(stderr, "SELECT failed. Error: %s\n", mysql_error(conn));
+        disconnect_db(conn); // Đừng quên ngắt kết nối nếu lỗi
         return -1;
     }
 
     res = mysql_store_result(conn);
     if (res == NULL) {
         fprintf(stderr, "mysql_store_result() failed. Error: %s\n", mysql_error(conn));
+        disconnect_db(conn);
         return -1;
     }
+    
+    int count = 0;
     int num_rows = mysql_num_rows(res);
-    if (num_rows == 0){
-        return 0;
-    }
-    row = mysql_fetch_row(res);
-        if (row != NULL) {
-            return atoi(row[1]);
+    if (num_rows > 0){
+        row = mysql_fetch_row(res);
+        if (row != NULL && row[1] != NULL) {
+            count = atoi(row[1]);
         }
+    }
 
     mysql_free_result(res);
     disconnect_db(conn);
+    return count;
 }
 
 char** get_seat_codes_by_flight_id(const char *flight_id, int *seat_count) {
@@ -173,4 +199,3 @@ char** get_seat_codes_by_flight_id(const char *flight_id, int *seat_count) {
     disconnect_db(conn);
     return seat_codes;
 }
-

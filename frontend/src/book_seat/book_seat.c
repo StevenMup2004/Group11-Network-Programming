@@ -7,462 +7,316 @@
 #include <arpa/inet.h>
 #include "../global/global.h"
 #include "../payment/payment.h"
-
+#include "../ticket_detail/ticket_detail.h"
+ 
 #define ROWS 30
-#define SEATS_PER_ROW 10
+#define SEATS_PER_COL 6
+#define AISLE_SIZE 40  
+ 
+// Kích thước ghế
+#define SEAT_SIZE 40
+#define SEAT_GAP 10
+ 
 int actual_rows = 20;
 int i_code, j_code;
-int ordered[ROWS][SEATS_PER_ROW];
-int temp_ordered[ROWS][SEATS_PER_ROW];
-double button_x, button_y, button_width = 120, button_height = 40;
+int ordered[ROWS][SEATS_PER_COL];
+ 
+// Biến toàn cục cho nút bấm
+double button_x, button_y, button_width, button_height; // Nút Confirm
+double btn_back_x, btn_back_y, btn_back_w, btn_back_h;  // Nút Back
+ 
 typedef struct {
     int row;
-    int seat;
+    int col;
     gboolean selected;
     char label[4];
+    double x, y;
 } Seat;
-Seat seats[ROWS][SEATS_PER_ROW];
-
+ 
+Seat seats[ROWS][SEATS_PER_COL];
 char selected_seat_label[4] = "";  
-
+ 
+// Helper: Vẽ hình chữ nhật bo góc
+static void draw_rounded_rect(cairo_t *cr, double x, double y, double w, double h, double r) {
+    cairo_new_path(cr);
+    cairo_arc(cr, x + w - r, y + r, r, -M_PI / 2, 0);
+    cairo_arc(cr, x + w - r, y + h - r, r, 0, M_PI / 2);
+    cairo_arc(cr, x + r, y + h - r, r, M_PI / 2, M_PI);
+    cairo_arc(cr, x + r, y + r, r, M_PI, 3 * M_PI / 2);
+    cairo_close_path(cr);
+}
+ 
+// Helper: Vẽ Ghế
+static void draw_airplane_seat(cairo_t *cr, double x, double y, int state, const char* label) {
+    // state: 0=Available, 1=Selected, 2=Unavailable
+   
+    // Màu nền ghế
+    if (state == 2) cairo_set_source_rgb(cr, 0.85, 0.85, 0.85); // Xám (Taken)
+    else if (state == 1) cairo_set_source_rgb(cr, 0.0, 0.3, 0.8); // Xanh đậm (Selected)
+    else cairo_set_source_rgb(cr, 1.0, 1.0, 1.0); // Trắng (Available)
+ 
+    draw_rounded_rect(cr, x, y, SEAT_SIZE, SEAT_SIZE, 8);
+    cairo_fill_preserve(cr);
+ 
+    // Viền ghế
+    if (state == 1) cairo_set_source_rgb(cr, 0.0, 0.2, 0.6);
+    else cairo_set_source_rgb(cr, 0.6, 0.7, 0.9);
+    cairo_set_line_width(cr, 2.0);
+    cairo_stroke(cr);
+ 
+    // Vẽ dấu X nếu đã đặt
+    if (state == 2) {
+        cairo_set_source_rgb(cr, 0.6, 0.6, 0.6);
+        cairo_move_to(cr, x + 10, y + 10);
+        cairo_line_to(cr, x + SEAT_SIZE - 10, y + SEAT_SIZE - 10);
+        cairo_move_to(cr, x + SEAT_SIZE - 10, y + 10);
+        cairo_line_to(cr, x + 10, y + SEAT_SIZE - 10);
+        cairo_stroke(cr);
+    } else {
+        // Vẽ nhãn ghế (A, B...)
+        if (state == 1) cairo_set_source_rgb(cr, 1, 1, 1);
+        else cairo_set_source_rgb(cr, 0.3, 0.3, 0.3);
+       
+        cairo_select_font_face(cr, "Inter", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+        cairo_set_font_size(cr, 14);
+        cairo_text_extents_t ext;
+        cairo_text_extents(cr, label, &ext);
+        cairo_move_to(cr, x + (SEAT_SIZE - ext.width)/2, y + (SEAT_SIZE + ext.height)/2);
+        cairo_show_text(cr, label);
+    }
+}
+ 
 void initialize_seats() {
-
-    actual_rows = detail_flight.capacity/10;
-    const char *columns = "ABCDEFGHIJ";
-    for (int i = 0; i < actual_rows; i++) {
-        for (int j = 0; j < SEATS_PER_ROW; j++) {
-            seats[i][j].row = i + 1;
-            seats[i][j].seat = j + 1;
-            seats[i][j].selected = FALSE;
-            snprintf(seats[i][j].label, sizeof(seats[i][j].label), "%d%c", i + 1, columns[j]);
-        }
-    }
-
+    actual_rows = detail_flight.capacity / 10;
+    if (actual_rows > ROWS) actual_rows = ROWS;
     memset(ordered, 0, sizeof(ordered));
-    memset(temp_ordered, 0, sizeof(temp_ordered));
-    for (int i = 0; i < seat_count; i++){
-        if (get_seat_position(seats_array[i], &i_code, &j_code) == 0){
-            ordered[i_code][j_code] = 1;
-            seats[i_code][j_code].selected = TRUE;
-        }
-    }
-    for (int i = 0; i < tem_seats_size; i++){
-        if (get_seat_position(temp_seats[i], &i_code, &j_code) == 0){
-            temp_ordered[i_code][j_code] = 1;
-            seats[i_code][j_code].selected = TRUE;
+    for (int k = 0; k < seat_count; k++) {
+        int r, c;
+        if (get_seat_position(seats_array[k], &r, &c) == 0) {
+             ordered[r][c] = 1;
         }
     }
 }
-
-
+ 
 static gboolean on_book_seat_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data) {
-    char date[20];
-    char time[20];
-    split_date_time(detail_flight.departure_time, date, time);
-    GdkPixbuf *bg_pixbuf;
-    GdkPixbuf *scaled_pixbuf;
-
-    gint screen_width = gtk_widget_get_allocated_width(widget);
-    gint screen_height = gtk_widget_get_allocated_height(widget);
-
-    bg_pixbuf = gdk_pixbuf_new_from_file("../assets/images/bg_login.png", NULL);
-    if (!bg_pixbuf) {
-        g_print("Error loading image!\n");
-        return FALSE;
-    }
-
-    scaled_pixbuf = gdk_pixbuf_scale_simple(bg_pixbuf, screen_width, screen_height, GDK_INTERP_BILINEAR);
-    gdk_cairo_set_source_pixbuf(cr, scaled_pixbuf, 0, 0);
+    (void)user_data;
+    gint w = gtk_widget_get_allocated_width(widget);
+    gint h = gtk_widget_get_allocated_height(widget);
+ 
+    // 1. Nền xám nhạt
+    cairo_set_source_rgb(cr, 0.96, 0.96, 0.96);
     cairo_paint(cr);
-    g_object_unref(scaled_pixbuf);
-    g_object_unref(bg_pixbuf);
-
-    cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);  
-gfloat rect_width_left = 600.0;  
-gfloat rect_height_left = 588.0; 
-gfloat padding_left = 50.0;     
-gfloat x_position_left = padding_left;                    
-gfloat y_position_left = (screen_height - rect_height_left) / 2; 
-
-    gfloat rect_width = 500.0;  
-    gfloat rect_height = 588;
-    gfloat radius = 24.0;       
-    gfloat padding_right = 50.0; 
-    gfloat x_position = screen_width - rect_width - padding_right; 
-    gfloat y_position = (screen_height - rect_height) / 2; 
-
-    cairo_move_to(cr, x_position + radius, y_position);
-cairo_arc(cr, x_position + rect_width - radius, y_position + radius, radius, 3 * M_PI / 2, 2 * M_PI);  
-cairo_arc(cr, x_position + rect_width - radius, y_position + rect_height - radius, radius, 0, M_PI / 2);  
-cairo_arc(cr, x_position + radius, y_position + rect_height - radius, radius, M_PI / 2, M_PI);  
-cairo_arc(cr, x_position + radius, y_position + radius, radius, M_PI, 3 * M_PI / 2);  
-
-    cairo_close_path(cr);  
-
-    cairo_set_line_width(cr, 1.0);
-    cairo_fill_preserve(cr);  
-    cairo_set_source_rgb(cr, 0.9, 0.9, 0.9);  
-    cairo_stroke(cr);  
-
-
-cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);  
-cairo_move_to(cr, x_position_left + radius, y_position_left);
-cairo_arc(cr, x_position_left + rect_width_left - radius, y_position_left + radius, radius, 3 * M_PI / 2, 2 * M_PI); 
-cairo_arc(cr, x_position_left + rect_width_left - radius, y_position_left + rect_height_left - radius, radius, 0, M_PI / 2); 
-cairo_arc(cr, x_position_left + radius, y_position_left + rect_height_left - radius, radius, M_PI / 2, M_PI); 
-cairo_arc(cr, x_position_left + radius, y_position_left + radius, radius, M_PI, 3 * M_PI / 2); 
-cairo_close_path(cr);
-cairo_fill_preserve(cr); 
-cairo_set_source_rgb(cr, 0.9, 0.9, 0.9);  
-cairo_stroke(cr);  
-
-double seat_width = 30, seat_height = 30;
-    double margin = 10;
-
-    for (int i = 0; i < actual_rows; i++) {
-        for (int j = 0; j < SEATS_PER_ROW; j++) {
-            double x = 150 + margin + j * (seat_width + margin);
-            double y = 150 + margin + i * (seat_height + margin);
-
-            if (i == 0) {
-                cairo_set_source_rgb(cr, 1.0, 0.75, 0.8);  
-            } else if (i == 1 || i == 2) {
-                cairo_set_source_rgb(cr, 0.7, 0.9, 1.0);  
-            } else {
-                cairo_set_source_rgb(cr, 0.7, 0.5, 1.0);  
-            }
-
-             
-            if (seats[i][j].selected) {
-                cairo_set_source_rgb(cr, 0.5, 0.5, 0.5);  
-            }
-            if (ordered[i][j] ==  1){
-                cairo_set_source_rgb(cr, 0.5, 0.5, 0.5);  
-            }
-            // if (temp_ordered[i][j] ==  1){
-            //     cairo_set_source_rgb(cr, 0.5, 0.5, 0.5);  
-            // }
-            cairo_rectangle(cr, x, y, seat_width, seat_height);
-            cairo_fill(cr);
-
-             
-            cairo_set_source_rgb(cr, 0, 0, 0);  
-            cairo_move_to(cr, x + seat_width / 4, y + seat_height / 1.5);
-            cairo_show_text(cr, seats[i][j].label);
-        }
-    }
-
-
-     
-    GdkPixbuf *airline_logo = gdk_pixbuf_new_from_file("../assets/images/airline.png", NULL);
-    if (airline_logo) {
-        GdkPixbuf *scaled_logo = gdk_pixbuf_scale_simple(airline_logo, 219, 53, GDK_INTERP_BILINEAR);
-        gdk_cairo_set_source_pixbuf(cr, scaled_logo,  x_position + radius + 120, y_position + 10);
-        cairo_paint(cr);
-        g_object_unref(scaled_logo);
-        g_object_unref(airline_logo);
-    }
-
-     
-    cairo_set_source_rgb(cr, 0.91, 0.91, 0.91);  
-    cairo_set_line_width(cr, 1.0);
-    cairo_move_to(cr, x_position + radius, y_position + 61);
-    cairo_line_to(cr, x_position + radius + 450, y_position + 61);
-    cairo_stroke(cr);
-
-     
-     
-    cairo_set_source_rgb(cr, 0.1, 0.1, 0.1);  
-    cairo_select_font_face(cr, "Poppins", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
-    cairo_set_font_size(cr, 14);
-    cairo_move_to(cr, (screen_width - 936) / 2 + 610, (screen_height - 588) / 2 + 100);
-    cairo_show_text(cr, extract_middle_string(detail_flight.departure_airport));
-
-     
-    cairo_set_source_rgb(cr, 0.4, 0.4, 0.4);  
-    cairo_select_font_face(cr, "Poppins", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
-    cairo_set_font_size(cr, 12);
-    cairo_move_to(cr, (screen_width - 936) / 2 + 610, (screen_height - 588) / 2 + 115);
-    cairo_show_text(cr, extract_middle_string(detail_flight.departure_airport));
-
-     
-    cairo_set_source_rgb(cr, 0.1, 0.1, 0.1);  
-    cairo_select_font_face(cr, "Poppins", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
-    cairo_move_to(cr, (screen_width - 936) / 2 + 770, (screen_height - 588) / 2 + 100);
-    cairo_set_font_size(cr, 14);
-    cairo_show_text(cr, extract_middle_string(detail_flight.arrival_airport));
-
-     
-    cairo_set_source_rgb(cr, 0.4, 0.4, 0.4);  
-    cairo_select_font_face(cr, "Poppins", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
-    cairo_move_to(cr, (screen_width - 936) / 2 + 770, (screen_height - 588) / 2 + 115);
-    cairo_set_font_size(cr, 12);
-    cairo_show_text(cr, extract_middle_string(detail_flight.arrival_airport));
-
-     
-    GdkPixbuf *flight_icon = gdk_pixbuf_new_from_file("../assets/images/flight-icon.png", NULL);
-    if (flight_icon) {
-        GdkPixbuf *scaled_flight_icon = gdk_pixbuf_scale_simple(flight_icon, 59, 14, GDK_INTERP_BILINEAR);
-        gdk_cairo_set_source_pixbuf(cr, scaled_flight_icon, (screen_width - 936) / 2 + 710, (screen_height - 588) / 2 + 88);
-        cairo_paint(cr);
-        g_object_unref(scaled_flight_icon);
-        g_object_unref(flight_icon);
-    }
-
-     
-cairo_set_source_rgb(cr, 0.91, 0.91, 0.91); 
-cairo_set_line_width(cr, 1.0);
-
  
-double x_pos = (screen_width - 936) / 2 + 850;  
-double y_start = (screen_height - 588) / 2 + 65;  
-double y_end = y_start + 75;  
-
+    // 2. Vẽ Modal
+    double modal_w = 1000;
+    double modal_h = 650; // TĂNG CHIỀU CAO từ 600 lên 650 để thoáng hơn
+    double modal_x = (w - modal_w) / 2;
+    double modal_y = (h - modal_h) / 2;
  
-cairo_move_to(cr, x_pos, y_start);  
-cairo_line_to(cr, x_pos, y_end);   
-cairo_stroke(cr);
-
-
-     
-    cairo_set_source_rgb(cr, 0.91, 0.91, 0.91);  
-    cairo_set_line_width(cr, 1.0);
-    cairo_move_to(cr, x_position + radius, y_position + 150);
-    cairo_line_to(cr, x_position + radius + 450, y_position + 150);
-    cairo_stroke(cr);
-
-      
-    cairo_set_source_rgb(cr, 0.1, 0.1, 0.1);  
-    cairo_select_font_face(cr, "Poppins", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
-    cairo_set_font_size(cr, 14);
-    cairo_move_to(cr, (screen_width - 936) / 2 + 870, (screen_height - 588) / 2 + 100);
-    cairo_show_text(cr, date);
-
-     
-    cairo_set_source_rgb(cr, 0.4, 0.4, 0.4);  
-    cairo_select_font_face(cr, "Poppins", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
-    cairo_set_font_size(cr, 12);
-    cairo_move_to(cr, (screen_width - 936) / 2 + 870, (screen_height - 588) / 2 + 115);
-    cairo_show_text(cr, time);
-
-     
-    cairo_set_source_rgb(cr, 0.1, 0.1, 0.1);  
-    cairo_select_font_face(cr, "Poppins", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
-    cairo_move_to(cr, (screen_width - 936) / 2 + 970, (screen_height - 588) / 2 + 100);
-    cairo_set_font_size(cr, 14);
-    cairo_show_text(cr, date);
-
-       
-    cairo_set_source_rgb(cr, 0.1, 0.1, 0.1);  
-    cairo_select_font_face(cr, "Poppins", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
-    cairo_move_to(cr, (screen_width - 936) / 2 + 940, (screen_height - 588) / 2 + 100);
-    cairo_set_font_size(cr, 14);
-    cairo_show_text(cr, "--");
-
-     
-    cairo_set_source_rgb(cr, 0.4, 0.4, 0.4);  
-    cairo_move_to(cr, (screen_width - 936) / 2 + 970, (screen_height - 588) / 2 + 115);
-    cairo_set_font_size(cr, 12);
-    cairo_show_text(cr,calculate_end_time(time, detail_flight.duration_minutes * 60));  
-
-
-     
-      GdkPixbuf *economy_logo = gdk_pixbuf_new_from_file("../assets/images/Economy.png", NULL);
-    if (economy_logo) {
-        GdkPixbuf *scaled_economy = gdk_pixbuf_scale_simple(economy_logo, 213, 120, GDK_INTERP_BILINEAR);
-        gdk_cairo_set_source_pixbuf(cr, scaled_economy,  x_position + radius - 30, y_position + 200);
-        cairo_paint(cr);
-        g_object_unref(scaled_economy);
-        g_object_unref(economy_logo);
-    }
-
-      
-    cairo_set_source_rgb(cr, 0.7, 0.5, 1.0); 
-    cairo_select_font_face(cr, "Poppins", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
-    cairo_set_font_size(cr, 14);
-    cairo_move_to(cr, (screen_width - 936) / 2 + 650, (screen_height - 588) / 2 + 330);
-    cairo_show_text(cr, "Economy Class");
-
-      GdkPixbuf *business_logo = gdk_pixbuf_new_from_file("../assets/images/Business.png", NULL);
-    if (business_logo) {
-        GdkPixbuf *scaled_business = gdk_pixbuf_scale_simple(business_logo, 213, 120, GDK_INTERP_BILINEAR);
-        gdk_cairo_set_source_pixbuf(cr, scaled_business,  x_position + radius + 230, y_position + 200);
-        cairo_paint(cr);
-        g_object_unref(scaled_business);
-        g_object_unref(business_logo);
-    }
-
-     
-    cairo_set_source_rgb(cr, 0.7, 0.9, 1.0); 
-    cairo_select_font_face(cr, "Poppins", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
-    cairo_set_font_size(cr, 14);
-    cairo_move_to(cr, (screen_width - 936) / 2 + 870, (screen_height - 588) / 2 + 330);
-    cairo_show_text(cr, "Business Class");
-
-     GdkPixbuf *first_logo = gdk_pixbuf_new_from_file("../assets/images/First.png", NULL);
-    if (first_logo) {
-        GdkPixbuf *scaled_first = gdk_pixbuf_scale_simple(first_logo, 213, 120, GDK_INTERP_BILINEAR);
-        gdk_cairo_set_source_pixbuf(cr, scaled_first,  x_position + radius + 100, y_position + 350);
-        cairo_paint(cr);
-        g_object_unref(scaled_first);
-        g_object_unref(first_logo);
-    }
-
-     
-    cairo_set_source_rgb(cr, 1.0, 0.75, 0.8); 
-    cairo_select_font_face(cr, "Poppins", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
-    cairo_set_font_size(cr, 14);
-    cairo_move_to(cr, (screen_width - 936) / 2 + 750, (screen_height - 588) / 2 + 480);
-    cairo_show_text(cr, "First Class");
-
-
-       
-    cairo_set_source_rgb(cr, 0.91, 0.91, 0.91);  
-    cairo_set_line_width(cr, 1.0);
-    cairo_move_to(cr, x_position + radius, y_position + 500);
-    cairo_line_to(cr, x_position + radius + 450, y_position + 500);
-    cairo_stroke(cr);  
-
-     
-   cairo_set_source_rgb(cr, 0.4, 0.4, 0.4);  
-    cairo_select_font_face(cr, "Poppins", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
-    cairo_set_font_size(cr, 14);
-    cairo_move_to(cr, (screen_width - 936) / 2 + 650, (screen_height - 588) / 2 + 550);
-    cairo_show_text(cr, "Seat number: ");
-    cairo_show_text(cr, join_strings(temp_seats, tem_seats_size, ", ")); 
-
-    cairo_set_source_rgb(cr, 0.4, 0.4, 0.4);  
-    cairo_select_font_face(cr, "Poppins", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
-    cairo_set_font_size(cr, 14);
-
-    char price_text[32];
-    snprintf(price_text, sizeof(price_text), "Price: %s VND", format_number_with_separator(price, ','));
-
-    cairo_move_to(cr, (screen_width - 936) / 2 + 650, (screen_height - 588) / 2 + 570);  
-    cairo_show_text(cr, price_text);
-
-    button_x = screen_width - 70 - button_width;
-    button_y = (screen_height - 588) / 2 + 530;
-
-    // Vẽ nút Confirm
-    cairo_set_source_rgb(cr, 0.13, 0.23, 0.37);
+    // Bóng đổ
+    cairo_save(cr);
+    draw_rounded_rect(cr, modal_x+5, modal_y+5, modal_w, modal_h, 15);
+    cairo_set_source_rgba(cr, 0, 0, 0, 0.1);
+    cairo_fill(cr);
+    cairo_restore(cr);
+ 
+    // Thân modal
+    draw_rounded_rect(cr, modal_x, modal_y, modal_w, modal_h, 15);
+    cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+    cairo_fill(cr);
+ 
+    // Header Xanh đậm
     cairo_new_path(cr);
-    cairo_arc(cr, button_x + 8, button_y + 8, 8, M_PI, 3 * M_PI / 2);
-    cairo_arc(cr, button_x + button_width - 8, button_y + 8, 8, 3 * M_PI / 2, 2 * M_PI);
-    cairo_arc(cr, button_x + button_width - 8, button_y + button_height - 8, 8, 0, M_PI / 2);
-    cairo_arc(cr, button_x + 8, button_y + button_height - 8, 8, M_PI / 2, M_PI);
+    cairo_arc(cr, modal_x + modal_w - 15, modal_y + 15, 15, -M_PI/2, 0);
+    cairo_line_to(cr, modal_x + modal_w, modal_y + 60);
+    cairo_line_to(cr, modal_x, modal_y + 60);
+    cairo_line_to(cr, modal_x, modal_y + 15);
+    cairo_arc(cr, modal_x + 15, modal_y + 15, 15, M_PI, 3*M_PI/2);
+    cairo_close_path(cr);
+    cairo_set_source_rgb(cr, 0.1, 0.15, 0.3);
+    cairo_fill(cr);
+ 
+    cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+    cairo_select_font_face(cr, "Inter", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+    cairo_set_font_size(cr, 22);
+    cairo_move_to(cr, modal_x + 30, modal_y + 38);
+    cairo_show_text(cr, "Select Your Seat");
+ 
+    // 3. Legend (Giữ nguyên vị trí y=80)
+    double legend_y = modal_y + 80;
+    double legend_x = modal_x + (modal_w - 420) / 2;
+   
+    // Available
+    draw_airplane_seat(cr, legend_x, legend_y, 0, "");
+    cairo_set_source_rgb(cr, 0.2, 0.2, 0.2); cairo_set_font_size(cr, 14);
+    cairo_move_to(cr, legend_x + 45, legend_y + 25); cairo_show_text(cr, "Available");
+ 
+    // Selected
+    draw_airplane_seat(cr, legend_x + 150, legend_y, 1, "");
+    cairo_set_source_rgb(cr, 0.2, 0.2, 0.2);
+    cairo_move_to(cr, legend_x + 195, legend_y + 25); cairo_show_text(cr, "Selected");
+ 
+    // Taken
+    draw_airplane_seat(cr, legend_x + 300, legend_y, 2, "");
+    cairo_set_source_rgb(cr, 0.2, 0.2, 0.2);
+    cairo_move_to(cr, legend_x + 345, legend_y + 25); cairo_show_text(cr, "Taken");
+ 
+    // 4. Máy Bay Ngang
+    double grid_start_x = modal_x + 80;
+    // THAY ĐỔI QUAN TRỌNG: Đẩy máy bay xuống thấp hơn (từ 150 -> 200)
+    double grid_start_y = modal_y + 200;
+   
+    double total_seat_w = actual_rows * (SEAT_SIZE + SEAT_GAP);
+    double total_seat_h = (SEATS_PER_COL * SEAT_SIZE) + ((SEATS_PER_COL - 1) * SEAT_GAP) + AISLE_SIZE;
+   
+    // Vẽ vỏ máy bay bao quanh ghế
+    // Điều chỉnh plane_y để nó bao trùm grid_start_y một cách hợp lý
+    // grid_start_y là điểm bắt đầu của hàng ghế trên cùng. Vỏ máy bay phải bắt đầu cao hơn một chút để chứa số hàng.
+    double plane_x = grid_start_x - 40;
+    double plane_y = grid_start_y - 40; // Bắt đầu vẽ vỏ máy bay cao hơn ghế 40px
+    double plane_w = total_seat_w + 100;
+    double plane_h = total_seat_h + 80; // Tăng chiều cao vỏ máy bay để rộng rãi hơn
+ 
+    cairo_set_source_rgb(cr, 0.9, 0.9, 0.9);
+    cairo_new_path(cr);
+    cairo_move_to(cr, plane_x + 50, plane_y);
+    cairo_curve_to(cr, plane_x - 50, plane_y, plane_x - 50, plane_y + plane_h, plane_x + 50, plane_y + plane_h);
+    cairo_line_to(cr, plane_x + plane_w - 20, plane_y + plane_h);
+    cairo_curve_to(cr, plane_x + plane_w + 20, plane_y + plane_h, plane_x + plane_w + 20, plane_y, plane_x + plane_w - 20, plane_y);
     cairo_close_path(cr);
     cairo_fill_preserve(cr);
+    cairo_set_source_rgb(cr, 0.7, 0.7, 0.7);
+    cairo_set_line_width(cr, 2.0);
     cairo_stroke(cr);
-
-    cairo_set_source_rgb(cr, 0.92, 0.94, 0.94);
-    cairo_select_font_face(cr, "Inter", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
-    cairo_set_font_size(cr, 16);
-
-    cairo_text_extents_t confirm_extents;
-    cairo_text_extents(cr, "Confirm", &confirm_extents);
-    cairo_move_to(cr,
-                  button_x + button_width / 2 - confirm_extents.width / 2,
-                  button_y + button_height / 2 + confirm_extents.height / 2);
-    cairo_show_text(cr, "Confirm");
-
-        return FALSE;
-    }
-
-  gboolean on_mouse_click_book_seat(GtkWidget *widget, GdkEventButton *event, gpointer data) {
-    double seat_width = 30, seat_height = 30;
-    double margin = 10;
-    double offset_x = 150;  
-
-     if (event->x >= button_x && event->x <= button_x + button_width &&
-        event->y >= button_y && event->y <= button_y + button_height) {
-        g_print("Confirm button clicked!\n");
-        if (tem_seats_size == 0){
-            gtk_label_set_text(GTK_LABEL(label_status), "Choose a least 1 seat");
-            return TRUE;
+ 
+    // 5. Lưới Ghế
+    const char *cols = "ABCDEF";
+    for (int r = 0; r < actual_rows; r++) {
+        double seat_x = grid_start_x + r * (SEAT_SIZE + SEAT_GAP);
+       
+        // Vẽ số hàng (1, 2, 3...)
+        char row_label[4];
+        snprintf(row_label, 4, "%d", r + 1);
+        cairo_text_extents_t ext;
+        cairo_text_extents(cr, row_label, &ext);
+        cairo_set_source_rgb(cr, 0.5, 0.5, 0.5);
+        // Vẽ số hàng ngay trên ghế đầu tiên khoảng 15px
+        cairo_move_to(cr, seat_x + (SEAT_SIZE - ext.width)/2, grid_start_y - 15);
+        cairo_show_text(cr, row_label);
+ 
+        for (int c = 0; c < SEATS_PER_COL; c++) {
+            double seat_y = grid_start_y + c * (SEAT_SIZE + SEAT_GAP);
+            if (c >= 3) seat_y += AISLE_SIZE;
+ 
+            seats[r][c].x = seat_x;
+            seats[r][c].y = seat_y;
+            seats[r][c].row = r + 1;
+            seats[r][c].col = c;
+            snprintf(seats[r][c].label, 4, "%d%c", r + 1, cols[c]);
+ 
+            int state = 0;
+            if (ordered[r][c] == 1) state = 2;
+            if (seats[r][c].selected) state = 1;
+ 
+            char seat_char[2] = {cols[c], '\0'};
+            draw_airplane_seat(cr, seat_x, seat_y, state, seat_char);
         }
+    }
+ 
+    // 6. Nút Confirm (Góc dưới phải)
+    button_width = 140;
+    button_height = 45;
+    button_x = modal_x + modal_w - 180;
+    button_y = modal_y + modal_h - 70;
+ 
+    draw_rounded_rect(cr, button_x, button_y, button_width, button_height, 22);
+    cairo_set_source_rgb(cr, 0.1, 0.6, 0.3); // Xanh lá
+    cairo_fill(cr);
+ 
+    cairo_set_source_rgb(cr, 1, 1, 1);
+    cairo_set_font_size(cr, 16);
+    cairo_text_extents_t ext;
+    cairo_text_extents(cr, "Confirm", &ext);
+    cairo_move_to(cr, button_x + (button_width - ext.width)/2, button_y + 28);
+    cairo_show_text(cr, "Confirm");
+ 
+    // 7. Nút Back (Góc dưới trái)
+    btn_back_w = 120;
+    btn_back_h = 45;
+    btn_back_x = button_x - btn_back_w - 20;
+    btn_back_y = button_y;
+ 
+    draw_rounded_rect(cr, btn_back_x, btn_back_y, btn_back_w, btn_back_h, 22);
+    cairo_set_source_rgb(cr, 0.9, 0.9, 0.9);
+    cairo_fill_preserve(cr);
+    cairo_set_source_rgb(cr, 0.7, 0.7, 0.7);
+    cairo_set_line_width(cr, 1.0);
+    cairo_stroke(cr);
+ 
+    cairo_set_source_rgb(cr, 0.3, 0.3, 0.3);
+    cairo_set_font_size(cr, 16);
+    cairo_text_extents(cr, "Back", &ext);
+    cairo_move_to(cr, btn_back_x + (btn_back_w - ext.width)/2, btn_back_y + 28);
+    cairo_show_text(cr, "Back");
+ 
+    return FALSE;
+}
+ 
+// Xử lý Click
+gboolean on_mouse_click_book_seat(GtkWidget *widget, GdkEventButton *event, gpointer data) {
+    (void)data;
+ 
+    // 1. Check Nút Confirm
+    if (event->x >= button_x && event->x <= button_x + button_width &&
+        event->y >= button_y && event->y <= button_y + button_height) {
+        if (tem_seats_size == 0) return TRUE;
         GtkWidget *payment_window = create_payment_window();
         set_content(payment_window);
         return TRUE;
     }
-
-
-    for (int i = 0; i < actual_rows; i++) {
-        for (int j = 0; j < SEATS_PER_ROW; j++) {
-             
-            double x = offset_x + margin + j * (seat_width + margin);
-            double y = 150 + margin + i * (seat_height + margin);   
-
-             
-            if (event->x >= x && event->x <= x + seat_width && event->y >= y && event->y <= y + seat_height) {
-                 
-                 
-                seats[i][j].selected = !seats[i][j].selected;
-                gtk_widget_queue_draw(widget);   
-                if (ordered[i][j] == 1){
-                     gtk_label_set_text(GTK_LABEL(label_status), "Please choose another, this seat is unavailable");
-                     return TRUE;
-                }
-
-                if (seats[i][j].selected) {
-                    strncpy(selected_seat_label, seats[i][j].label, sizeof(selected_seat_label));
-                    g_print("Seat selected: %s\n", selected_seat_label);
-                    temp_seats = add_string_to_array(temp_seats, &tem_seats_size, selected_seat_label);
-                    if (i == 0){
-                        price += detail_flight.price * 10;
-                    }
-                    else if (i == 1 || i == 2){
-                        price += detail_flight.price * 5;
-                    }
-                    else price += detail_flight.price;
+ 
+    // 2. Check Nút Back
+    if (event->x >= btn_back_x && event->x <= btn_back_x + btn_back_w &&
+        event->y >= btn_back_y && event->y <= btn_back_y + btn_back_h) {
+       
+        GtkWidget *ticket_detail_window = create_ticket_detail_window();
+        set_content(ticket_detail_window);
+        return TRUE;
+    }
+ 
+    // 3. Check Click vào ghế
+    for (int r = 0; r < actual_rows; r++) {
+        for (int c = 0; c < SEATS_PER_COL; c++) {
+            Seat *s = &seats[r][c];
+            if (event->x >= s->x && event->x <= s->x + SEAT_SIZE &&
+                event->y >= s->y && event->y <= s->y + SEAT_SIZE) {
+               
+                if (ordered[r][c] == 1) return TRUE; // Đã đặt
+ 
+                s->selected = !s->selected;
+                if (s->selected) {
+                    temp_seats = add_string_to_array(temp_seats, &tem_seats_size, s->label);
+                    price += detail_flight.price;
                 } else {
-                    g_print("Seat deselected: %s\n", seats[i][j].label);
-                    temp_seats = remove_string_from_array(temp_seats, &tem_seats_size, selected_seat_label);
-                    if (i == 0){
-                        price -= detail_flight.price * 10;
-                    }
-                    else if (i == 1 || i == 2){
-                        price -= detail_flight.price * 5;
-                    }
-                    else price -= detail_flight.price;
+                    temp_seats = remove_string_from_array(temp_seats, &tem_seats_size, s->label);
+                    price -= detail_flight.price;
                 }
+                gtk_widget_queue_draw(widget);
                 return TRUE;
             }
         }
     }
-
     return FALSE;
 }
-
-  GtkWidget* create_book_seat_window() {
+ 
+GtkWidget* create_book_seat_window() {
     GtkWidget *drawing_area, *main_box;
-
-     
     main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-
-     initialize_seats(); 
-
-     
+    initialize_seats();
     drawing_area = gtk_drawing_area_new();
     g_signal_connect(drawing_area, "draw", G_CALLBACK(on_book_seat_draw), NULL);
     g_signal_connect(G_OBJECT(drawing_area), "button-press-event", G_CALLBACK(on_mouse_click_book_seat), NULL);
-
     gtk_widget_add_events(drawing_area, GDK_BUTTON_PRESS_MASK);
     gtk_box_pack_start(GTK_BOX(main_box), drawing_area, TRUE, TRUE, 0);
-
-    label_status = gtk_label_new("");
-    gtk_box_pack_start(GTK_BOX(main_box), label_status, FALSE, FALSE, 0);
-    GtkCssProvider *css_provider_label = gtk_css_provider_new();
-    gtk_css_provider_load_from_data(css_provider_label,
-        "label {"
-        "   color: red;"  // Đặt màu chữ thành đỏ
-        "}",
-        -1, NULL);
-
-    // Áp dụng CSS cho label
-    gtk_style_context_add_provider(gtk_widget_get_style_context(label_status),
-    GTK_STYLE_PROVIDER(css_provider_label), GTK_STYLE_PROVIDER_PRIORITY_USER);
-
-
     return main_box;
 }

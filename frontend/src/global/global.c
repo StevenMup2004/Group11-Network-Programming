@@ -16,7 +16,7 @@
 #define PORT 8888
 #define RUNTIME_SECONDS 900 
 
-GtkWidget *entry_email, *entry_password, *label_status;
+// GtkWidget *entry_email, *entry_password, *label_status;
 char buffer[MAX_LENGTH];
 int sock;
 GtkWidget *window;
@@ -81,10 +81,59 @@ GtkWidget* create_main_window() {
 
     
     GtkCssProvider *provider = gtk_css_provider_new();
+    // Sử dụng Gradient: Từ màu xanh đen (#0f2027) sang xanh dương đậm (#2c5364)
+    
+    // Thay thế đoạn cũ bằng đoạn này:
     if (!gtk_css_provider_load_from_data(provider,
-        "* { background-image: url('../assets/images/bg_login.png'); background-size: cover; background-position: center; }"
-        "#register-box { background-color: #FFFFFF; border-radius: 20px; padding: 48px 72px; }"
-        "#register-title { font-family: Arial, sans-serif; font-size: 28px; font-weight: bold; color: #101828; }",
+        // 1. Thiết lập nền sáng (trắng pha xanh nhẹ) cho toàn bộ cửa sổ
+        "window { "
+        "   background-image: linear-gradient(to bottom, #f0f8ff, #e6e9f0); " // Màu AliceBlue chuyển sang xám nhạt
+        "   color: #2c3e50; " // Màu chữ: Xanh đen đậm (dễ đọc hơn đen tuyền)
+        "   font-family: 'Segoe UI', sans-serif; " // Font chữ hiện đại (nếu máy có)
+        "}\n"
+        
+        // 2. Làm đẹp các khung (Card) như Login/Register
+        "#register-box, #login-box { "
+        "   background-color: #ffffff; " // Nền khung màu trắng tinh
+        "   border-radius: 16px; "       // Bo tròn góc mềm mại
+        "   box-shadow: 0 10px 30px rgba(0,0,0,0.1); " // Đổ bóng nhẹ tạo chiều sâu 3D
+        "   padding: 40px; "
+        "}\n"
+        
+        // 3. Tiêu đề
+        "#register-title, #login-title { "
+        "   font-size: 26px; "
+        "   font-weight: 800; "
+        "   color: #223A60; " // Màu xanh thương hiệu (giống logo Airline)
+        "   margin-bottom: 20px; "
+        "}\n"
+
+        // 4. Ô nhập liệu (Input)
+        "entry { "
+        "   background-color: #f7f9fc; " // Màu nền ô nhập hơi xám nhẹ để phân biệt
+        "   border: 1px solid #dfe3e8; " // Viền mỏng
+        "   border-radius: 8px; "
+        "   padding: 10px; "
+        "   color: #333333; " // Chữ khi gõ màu đen rõ ràng
+        "}\n"
+        "entry:focus { "
+        "   border-color: #223A60; " // Khi bấm vào thì viền đổi màu xanh
+        "   box-shadow: 0 0 0 2px rgba(34, 58, 96, 0.1); "
+        "}\n"
+
+        // 5. Nút bấm (Button)
+        "button { "
+        "   background-image: linear-gradient(to right, #223A60, #2c5364); " // Nút màu xanh đậm
+        "   color: white; " // Chữ trên nút màu trắng
+        "   border-radius: 8px; "
+        "   font-weight: bold; "
+        "   border: none; "
+        "   box-shadow: 0 4px 6px rgba(0,0,0,0.15); "
+        "}\n"
+        "button:hover { "
+        "   background-image: linear-gradient(to right, #2c5364, #223A60); " // Hiệu ứng đổi màu khi di chuột
+        "   box-shadow: 0 6px 12px rgba(0,0,0,0.2); "
+        "}\n",
         -1, NULL)) {
         g_print("Failed to load CSS\n");
     }
@@ -530,23 +579,31 @@ char* get_current_timeV2() {
 
 void open_browser(const char *url) {
     char command[2048];
-
-    // Clear the command buffer before use
     memset(command, 0, sizeof(command));
 
 #ifdef _WIN32
-    snprintf(command, sizeof(command), "start %s", url); 
+    snprintf(command, sizeof(command), "start %s", url);
 #elif __APPLE__
-    snprintf(command, sizeof(command), "open %s", url);  
+    snprintf(command, sizeof(command), "open %s", url);
 #else
-    snprintf(command, sizeof(command), "xdg-open \"%s\"", url);  
-    printf("Check command: %s\n", command);
+    // --- CHỈNH SỬA CHO WSL ---
+    // Thay vì dùng xdg-open, ta dùng explorer.exe để mở trình duyệt Windows
+    snprintf(command, sizeof(command), "explorer.exe \"%s\"", url);
+    // -------------------------
 #endif
 
-    // Execute the command
+    printf("Executing command: %s\n", command);
     int ret = system(command);
     if (ret != 0) {
         printf("Failed to open URL. Error code: %d\n", ret);
+        // Fallback: Nếu explorer.exe thất bại (ví dụ trên Linux thật), thử lại xdg-open
+        #ifndef _WIN32
+        #ifndef __APPLE__
+            char fallback_command[2048];
+            snprintf(fallback_command, sizeof(fallback_command), "xdg-open \"%s\"", url);
+            system(fallback_command);
+        #endif
+        #endif
     }
 }
 
@@ -557,7 +614,7 @@ void vnpay_payment() {
     const char *vnp_HashSecret = "OLMEGIFJE0ODTO3SZ0PETBRGUFW2H3FW";
     const char *vnp_Url = "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html";
 
-    char *vnp_TxnRef = generate_random_number(2);
+    char *vnp_TxnRef = generate_random_number(8);
     char *vnp_Amount = convert_to_string_amount(final_price * 100); 
     char *vnp_CreateDate = get_current_timeV2(); 
     const char *vnp_CurrCode = "VND";

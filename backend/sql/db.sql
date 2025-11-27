@@ -1,4 +1,3 @@
-
 CREATE DATABASE ticketrail;
 USE ticketrail;
 
@@ -57,31 +56,32 @@ CREATE TABLE airplanes (
     FOREIGN KEY (airline_id) REFERENCES airlines(airline_id) ON DELETE CASCADE
 );
 
-INSERT INTO airplanes (airplane_id, airline_id, capacity)
+-- ĐÃ CẬP NHẬT: Giá vé đồng giá 10.000 VND
+INSERT INTO airplanes (airplane_id, airline_id, price, capacity)
 VALUES
-    ('VN0001', 'VN', 150),
-    ('VN0002', 'VN', 120),
-    ('VN0003', 'VN', 180),
-    ('VN0004', 'VN', 110),
-    ('VN0005', 'VN', 200),
+    ('VN0001', 'VN', 1000000, 150),
+    ('VN0002', 'VN', 2000000, 120),
+    ('VN0003', 'VN', 1000000, 180),
+    ('VN0004', 'VN', 1000000, 110),
+    ('VN0005', 'VN', 1000000, 200),
 
-    ('VJ0001', 'VJ', 140),
-    ('VJ0002', 'VJ', 130),
-    ('VJ0003', 'VJ', 170),
-    ('VJ0004', 'VJ', 160),
-    ('VJ0005', 'VJ', 190),
+    ('VJ0001', 'VJ', 1000000, 140),
+    ('VJ0002', 'VJ', 1000000, 130),
+    ('VJ0003', 'VJ', 1000000, 170),
+    ('VJ0004', 'VJ', 1000000, 160),
+    ('VJ0005', 'VJ', 1000000, 190),
 
-    ('V8001', 'V8', 125),
-    ('V8002', 'V8', 135),
-    ('V8003', 'V8', 145),
-    ('V8004', 'V8', 155),
-    ('V8005', 'V8', 165),
+    ('V8001', 'V8', 1000000, 125),
+    ('V8002', 'V8', 1000000, 135),
+    ('V8003', 'V8', 1000000, 145),
+    ('V8004', 'V8', 1000000, 155),
+    ('V8005', 'V8', 1000000, 165),
 
-    ('QH0001', 'QH', 100),
-    ('QH0002', 'QH', 105),
-    ('QH0003', 'QH', 110),
-    ('QH0004', 'QH', 115),
-    ('QH0005', 'QH', 120);
+    ('QH0001', 'QH', 1000000, 100),
+    ('QH0002', 'QH', 1000000, 105),
+    ('QH0003', 'QH', 1000000, 110),
+    ('QH0004', 'QH', 1000000, 115),
+    ('QH0005', 'QH', 1000000, 120);
 
 CREATE TABLE flights (
     flight_id varchar(255) PRIMARY KEY,
@@ -98,15 +98,15 @@ CREATE TABLE flights (
 );
 
 insert into flights (flight_id, departure_airport, arrival_airport, departure_time, duration_minutes, airplane_id)
-values ('VN001', 'SGN', 'HAN', '2024-12-13 17:00', 150, 'VN0001'),
-	('VN002', 'SGN', 'DAD', '2024-12-15 16:00', 170, 'VN0001'),
-    ('VN003', 'SGN', 'HUI', '2024-12-17 16:00', 200, 'VN0001'),
-    ('VN004', 'SGN', 'THD', '2024-12-14 17:00', 100, 'VN0001'),
-    ('VN005', 'SGN', 'PQC', '2024-12-17 16:00', 190, 'VN0001'),
-    ('VN006', 'SGN', 'PQC', '2024-12-17 2:00', 165, 'VN0001'),
-    ('VN007', 'SGN', 'PQC', '2024-12-17 3:30', 140, 'VN0002');
-
-
+values 
+    ('VN001', 'SGN', 'HAN', '2025-12-13 17:00', 150, 'VN0001'),
+    ('VN002', 'SGN', 'DAD', '2025-12-15 16:00', 170, 'VN0001'),
+    ('VN003', 'SGN', 'HUI', '2025-12-17 16:00', 200, 'VN0001'),
+    ('VN004', 'SGN', 'THD', '2025-12-14 17:00', 100, 'VN0001'),
+    ('VN005', 'SGN', 'PQC', '2025-12-17 16:00', 190, 'VN0001'),
+    ('VN006', 'SGN', 'PQC', '2025-11-20 2:00', 165, 'VN0001'),
+    ('VN007', 'SGN', 'PQC', '2025-11-20 3:30', 140, 'VN0002');
+    
 
 CREATE TABLE bookings (
     booking_id INT PRIMARY KEY AUTO_INCREMENT,
@@ -129,21 +129,8 @@ CREATE TABLE booking_details (
     FOREIGN KEY (booking_id) REFERENCES bookings(booking_id) ON DELETE CASCADE
 );
 
-
--- get all ticket with user id 
--- use ticketrail;
--- SELECT f.flight_id, f.departure_time, f.duration_minutes, al.name, da.airport_id, da.name, da.city, aa.airport_id, aa.name, aa.city, b.total_price FROM flights f JOIN airplanes ap ON f.airplane_id = ap.airplane_id JOIN airlines al ON ap.airline_id = al.airline_id JOIN airports da ON f.departure_airport = da.airport_id JOIN airports aa ON f.arrival_airport = aa.airport_id JOIN bookings b ON f.flight_id = b.flight_id JOIN booking_details bd ON b.booking_id = bd.booking_id WHERE user_id = ?;
-
-
--- create a booking
--- use ticketrail;
--- insert into bookings (booking_time, total_price, user_id, flight_id) values ('2024-12-21', 1000000, 3, 'VN007');
--- SELECT LAST_INSERT_ID();
--- insert into booking_details (booking_id, type, seat_code) values (3, 'Economy', '10A');
-
-
 Create table announces (
-	announce_id int primary key auto_increment,
+    announce_id int primary key auto_increment,
     flight_id varchar(255),
     content text,
     created_at timestamp default current_timestamp,
