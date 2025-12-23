@@ -18,7 +18,6 @@
 #define SEAT_GAP 10
  
 int actual_rows = 20;
-int i_code, j_code;
 int ordered[ROWS][SEATS_PER_COL];
  
 // Biến toàn cục cho nút bấm
@@ -35,6 +34,31 @@ typedef struct {
  
 Seat seats[ROWS][SEATS_PER_COL];
 char selected_seat_label[4] = "";  
+
+// --- HÀM KIỂM TRA HẠNG VÉ ---
+// Trả về TRUE nếu hàng ghế (row_idx) thuộc về hạng vé (ticket_class) đang chọn
+static gboolean is_row_in_class(int row_idx, const char *ticket_class) {
+    // Row 0 (Hàng 1): First Class
+    // Row 1-2 (Hàng 2-3): Business
+    // Row 3+ (Hàng 4 trở đi): Economy
+    
+    if (strcmp(ticket_class, "First Class") == 0) {
+        return (row_idx == 0);
+    } 
+    else if (strcmp(ticket_class, "Business") == 0) {
+        return (row_idx == 1 || row_idx == 2);
+    } 
+    else { // Economy
+        return (row_idx >= 3);
+    }
+}
+
+// --- HÀM LẤY HỆ SỐ GIÁ ---
+static double get_price_multiplier(const char *ticket_class) {
+    if (strcmp(ticket_class, "First Class") == 0) return 2.0;
+    if (strcmp(ticket_class, "Business") == 0) return 1.5;
+    return 1.0; // Economy
+}
  
 // Helper: Vẽ hình chữ nhật bo góc
 static void draw_rounded_rect(cairo_t *cr, double x, double y, double w, double h, double r) {
@@ -90,10 +114,12 @@ void initialize_seats() {
     actual_rows = detail_flight.capacity / 10;
     if (actual_rows > ROWS) actual_rows = ROWS;
     memset(ordered, 0, sizeof(ordered));
+    
+    // Cập nhật trạng thái ghế đã đặt từ server
     for (int k = 0; k < seat_count; k++) {
         int r, c;
         if (get_seat_position(seats_array[k], &r, &c) == 0) {
-             ordered[r][c] = 1;
+             if (r < ROWS && c < SEATS_PER_COL) ordered[r][c] = 1;
         }
     }
 }
@@ -109,7 +135,7 @@ static gboolean on_book_seat_draw(GtkWidget *widget, cairo_t *cr, gpointer user_
  
     // 2. Vẽ Modal
     double modal_w = 1000;
-    double modal_h = 650; // TĂNG CHIỀU CAO từ 600 lên 650 để thoáng hơn
+    double modal_h = 650;
     double modal_x = (w - modal_w) / 2;
     double modal_y = (h - modal_h) / 2;
  
@@ -135,14 +161,18 @@ static gboolean on_book_seat_draw(GtkWidget *widget, cairo_t *cr, gpointer user_
     cairo_close_path(cr);
     cairo_set_source_rgb(cr, 0.1, 0.15, 0.3);
     cairo_fill(cr);
- 
+    
+    // Tiêu đề Header (Hiển thị hạng vé đang chọn)
+    char title_buffer[100];
+    snprintf(title_buffer, sizeof(title_buffer), "Select Seat - %s Class", class);
+    
     cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
     cairo_select_font_face(cr, "Inter", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
     cairo_set_font_size(cr, 22);
     cairo_move_to(cr, modal_x + 30, modal_y + 38);
-    cairo_show_text(cr, "Select Your Seat");
+    cairo_show_text(cr, title_buffer);
  
-    // 3. Legend (Giữ nguyên vị trí y=80)
+    // 3. Legend
     double legend_y = modal_y + 80;
     double legend_x = modal_x + (modal_w - 420) / 2;
    
@@ -163,19 +193,16 @@ static gboolean on_book_seat_draw(GtkWidget *widget, cairo_t *cr, gpointer user_
  
     // 4. Máy Bay Ngang
     double grid_start_x = modal_x + 80;
-    // THAY ĐỔI QUAN TRỌNG: Đẩy máy bay xuống thấp hơn (từ 150 -> 200)
     double grid_start_y = modal_y + 200;
    
     double total_seat_w = actual_rows * (SEAT_SIZE + SEAT_GAP);
     double total_seat_h = (SEATS_PER_COL * SEAT_SIZE) + ((SEATS_PER_COL - 1) * SEAT_GAP) + AISLE_SIZE;
    
-    // Vẽ vỏ máy bay bao quanh ghế
-    // Điều chỉnh plane_y để nó bao trùm grid_start_y một cách hợp lý
-    // grid_start_y là điểm bắt đầu của hàng ghế trên cùng. Vỏ máy bay phải bắt đầu cao hơn một chút để chứa số hàng.
+    // Vẽ khung thân máy bay
     double plane_x = grid_start_x - 40;
-    double plane_y = grid_start_y - 40; // Bắt đầu vẽ vỏ máy bay cao hơn ghế 40px
+    double plane_y = grid_start_y - 40;
     double plane_w = total_seat_w + 100;
-    double plane_h = total_seat_h + 80; // Tăng chiều cao vỏ máy bay để rộng rãi hơn
+    double plane_h = total_seat_h + 80;
  
     cairo_set_source_rgb(cr, 0.9, 0.9, 0.9);
     cairo_new_path(cr);
@@ -189,18 +216,22 @@ static gboolean on_book_seat_draw(GtkWidget *widget, cairo_t *cr, gpointer user_
     cairo_set_line_width(cr, 2.0);
     cairo_stroke(cr);
  
-    // 5. Lưới Ghế
+    // 5. Lưới Ghế (CÓ LỌC THEO HẠNG VÉ)
     const char *cols = "ABCDEF";
     for (int r = 0; r < actual_rows; r++) {
+        // [QUAN TRỌNG] Chỉ vẽ ghế nếu thuộc hạng vé đang chọn
+        if (!is_row_in_class(r, class)) {
+            continue; 
+        }
+
         double seat_x = grid_start_x + r * (SEAT_SIZE + SEAT_GAP);
        
-        // Vẽ số hàng (1, 2, 3...)
+        // Vẽ số hàng
         char row_label[4];
         snprintf(row_label, 4, "%d", r + 1);
         cairo_text_extents_t ext;
         cairo_text_extents(cr, row_label, &ext);
         cairo_set_source_rgb(cr, 0.5, 0.5, 0.5);
-        // Vẽ số hàng ngay trên ghế đầu tiên khoảng 15px
         cairo_move_to(cr, seat_x + (SEAT_SIZE - ext.width)/2, grid_start_y - 15);
         cairo_show_text(cr, row_label);
  
@@ -223,7 +254,7 @@ static gboolean on_book_seat_draw(GtkWidget *widget, cairo_t *cr, gpointer user_
         }
     }
  
-    // 6. Nút Confirm (Góc dưới phải)
+    // 6. Nút Confirm
     button_width = 140;
     button_height = 45;
     button_x = modal_x + modal_w - 180;
@@ -240,7 +271,7 @@ static gboolean on_book_seat_draw(GtkWidget *widget, cairo_t *cr, gpointer user_
     cairo_move_to(cr, button_x + (button_width - ext.width)/2, button_y + 28);
     cairo_show_text(cr, "Confirm");
  
-    // 7. Nút Back (Góc dưới trái)
+    // 7. Nút Back
     btn_back_w = 120;
     btn_back_h = 45;
     btn_back_x = button_x - btn_back_w - 20;
@@ -284,8 +315,11 @@ gboolean on_mouse_click_book_seat(GtkWidget *widget, GdkEventButton *event, gpoi
         return TRUE;
     }
  
-    // 3. Check Click vào ghế
+    // 3. Check Click vào ghế (ÁP DỤNG LOGIC MỚI)
     for (int r = 0; r < actual_rows; r++) {
+        // [QUAN TRỌNG] Bỏ qua các hàng không thuộc hạng vé đang chọn
+        if (!is_row_in_class(r, class)) continue;
+
         for (int c = 0; c < SEATS_PER_COL; c++) {
             Seat *s = &seats[r][c];
             if (event->x >= s->x && event->x <= s->x + SEAT_SIZE &&
@@ -294,12 +328,17 @@ gboolean on_mouse_click_book_seat(GtkWidget *widget, GdkEventButton *event, gpoi
                 if (ordered[r][c] == 1) return TRUE; // Đã đặt
  
                 s->selected = !s->selected;
+                
+                // TÍNH GIÁ TIỀN ĐỘNG
+                double multiplier = get_price_multiplier(class);
+                int seat_price = (int)(detail_flight.price * multiplier);
+
                 if (s->selected) {
                     temp_seats = add_string_to_array(temp_seats, &tem_seats_size, s->label);
-                    price += detail_flight.price;
+                    price += seat_price;
                 } else {
                     temp_seats = remove_string_from_array(temp_seats, &tem_seats_size, s->label);
-                    price -= detail_flight.price;
+                    price -= seat_price;
                 }
                 gtk_widget_queue_draw(widget);
                 return TRUE;
