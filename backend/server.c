@@ -172,14 +172,15 @@ void *handle_client(void *client_socket) {
                 if (!checkEmailExist(email)){
                     send(sock, "EMAIL_NOT_FOUND", strlen("EMAIL_NOT_FOUND") + 1, 0);
                 }else {
-                    if (login_user(email, password, &user_id)){
-                        printf("Check user id: %d\n", user_id);
-                        char msg_with_id[256];
-                        snprintf(msg_with_id, sizeof(msg_with_id), "SUCCESS:%d", user_id);
-                        send(sock, msg_with_id, strlen(msg_with_id) + 1, 0);  
-                        is_logged_in = true;
-                    }
-                    else send(sock, "FAILED", strlen("FAILED") + 1, 0);
+                    if (login_user(email, password, &user_id, name)){ // Thêm tham số name
+                    printf("Check user id: %d, Name: %s\n", user_id, name);
+                    char msg_with_id[512]; // Tăng kích thước buffer
+                    // Gửi thêm name về client
+                    snprintf(msg_with_id, sizeof(msg_with_id), "SUCCESS:%d:%s", user_id, name);
+                    send(sock, msg_with_id, strlen(msg_with_id) + 1, 0);  
+                    is_logged_in = true;
+                }
+                else send(sock, "FAILED", strlen("FAILED") + 1, 0);
                 }
             }
         }

@@ -169,8 +169,10 @@ static gboolean on_payment_draw(GtkWidget *widget, cairo_t *cr, gpointer user_da
     double row_h = 60;
  
     // Row 1
+    // Row 1
     draw_text(cr, "Passenger", "Inter", 12, col1, grid_y, 0.6, 0.6, 0.6, FALSE);
-    draw_text(cr, "JOHN DOE", "Inter", 16, col1, grid_y + 20, 0.1, 0.1, 0.1, TRUE);
+    // Thay "JOHN DOE" bằng biến current_user_full_name
+    draw_text(cr, current_user_full_name, "Inter", 16, col1, grid_y + 20, 0.1, 0.1, 0.1, TRUE);
  
     draw_text(cr, "Flight", "Inter", 12, col2, grid_y, 0.6, 0.6, 0.6, FALSE);
     draw_text(cr, detail_flight.flight_id, "Inter", 16, col2, grid_y + 20, 0.1, 0.1, 0.1, TRUE);

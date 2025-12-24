@@ -15,7 +15,8 @@
 
 #define PORT 8888
 #define RUNTIME_SECONDS 900 
-
+// Thêm vào phần khai báo biến đầu file (sau các include)
+char current_user_full_name[255] = "GUEST USER";
 char buffer[MAX_LENGTH];
 int sock;
 GtkWidget *window;
@@ -386,17 +387,33 @@ char* get_current_timeV2() {
              t->tm_year + 1900, t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
     return output;
 }
-
 void open_browser(const char *url) {
-    char command[2048];
+    char command[8192]; // Tăng buffer tối đa
+
     #ifdef _WIN32
-        snprintf(command, sizeof(command), "start %s", url);
+        // Windows Native (MinGW)
+        snprintf(command, sizeof(command), "start \"\" \"%s\"", url);
     #elif __APPLE__
-        snprintf(command, sizeof(command), "open %s", url);
+        // macOS
+        snprintf(command, sizeof(command), "open \"%s\"", url);
     #else
-        snprintf(command, sizeof(command), "xdg-open \"%s\"", url);
+        // WSL / Linux
+        // SỬA ĐỔI: Dùng PowerShell để mở link an toàn nhất
+        // Cú pháp: powershell.exe -Command "Start-Process 'URL'"
+        // Dấu nháy đơn ' bao quanh URL giúp bảo vệ các ký tự & ? =
+        snprintf(command, sizeof(command), "powershell.exe -Command \"Start-Process '%s'\"", url);
     #endif
-    system(command);
+
+    printf("Executing command: %s\n", command);
+    
+    // Gọi lệnh hệ thống
+    int ret = system(command);
+    
+    // Fallback: Nếu không gọi được powershell (ví dụ Linux thuần), thử xdg-open
+    if (ret != 0) {
+        snprintf(command, sizeof(command), "xdg-open \"%s\"", url);
+        system(command);
+    }
 }
 
 void vnpay_payment() {

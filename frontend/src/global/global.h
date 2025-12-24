@@ -6,7 +6,7 @@
 #include <stdbool.h>
 #define MAX_LENGTH 4096
 #define M_PI 3.14159265358979323846
-
+extern char current_user_full_name[255];
 typedef struct {
     char flight_id[MAX_LENGTH];
     char departure_airport[MAX_LENGTH];

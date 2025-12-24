@@ -6,14 +6,20 @@
 #include <arpa/inet.h>
 #include <string.h>
 #include <math.h> 
-#include "../component/component.h"
 #include "../global/global.h"
 #include "../server_com/server_com.h"
 #include "../list/list.h"
 #include <gdk-pixbuf/gdk-pixbuf.h>
+#include "../my_account/my_account.h"
+#include "../component/component.h" 
 
 #define PLANE_IMAGE_PATH "../assets/images/plane.png"
 
+// --- KHAI BÁO HÀM TỪ BÊN NGOÀI (FIX LỖI UNDECLARED) ---
+extern void show_list_tickets(GtkWidget *widget, gpointer data);
+// -----------------------------------------------------
+
+// Biến toàn cục
 GtkWidget *homepage_window;
 GtkWidget *input_from, *input_to, *input_departure, *input_return, *combo_box, *input_traveller;
 int bytes_received; 
@@ -23,12 +29,15 @@ static void on_window_realize(GtkWidget *widget, gpointer user_data);
 static gboolean on_input_box_focus_in(GtkWidget *widget, GdkEvent *event, gpointer user_data);
 static void on_calendar_day_selected(GtkCalendar *calendar, gpointer user_data);
 static gboolean on_draw_background(GtkWidget *widget, cairo_t *cr, gpointer user_data);
+void apply_custom_css(GtkWidget *widget);
 
 // ============================================================
-// PHẦN 1: LOGIC (GIỮ NGUYÊN)
+// PHẦN 1: LOGIC & CHUYỂN TRANG
 // ============================================================
 
 void on_list_link_click(GtkWidget *widget, gpointer data) {
+    (void)widget; (void)data; 
+    
     send(sock, "GET FLIGHTS", strlen("GET FLIGHTS"), 0);
     recv(sock, &flight_count, sizeof(flight_count), 0);
     int bytes_received = recv(sock, buffer, sizeof(buffer) - 1, 0);
@@ -37,7 +46,7 @@ void on_list_link_click(GtkWidget *widget, gpointer data) {
     parse_flight_data(buffer, flights);
     
     const char *traveller = gtk_entry_get_text(GTK_ENTRY(input_traveller));
-    const char *selected_class = gtk_combo_box_text_get_active_text(GTK_COMBO_BOX_TEXT(combo_box));
+    char *selected_class = gtk_combo_box_text_get_active_text(GTK_COMBO_BOX_TEXT(combo_box));
     const char *date_text;
     
     GList *children = gtk_container_get_children(GTK_CONTAINER(input_departure));
@@ -53,11 +62,12 @@ void on_list_link_click(GtkWidget *widget, gpointer data) {
         date_text = "";
     }
 
-    const char *from = gtk_combo_box_text_get_active_text(GTK_COMBO_BOX_TEXT(input_from));
-    const char *to = gtk_combo_box_text_get_active_text(GTK_COMBO_BOX_TEXT(input_to));
+    char *from = gtk_combo_box_text_get_active_text(GTK_COMBO_BOX_TEXT(input_from));
+    char *to = gtk_combo_box_text_get_active_text(GTK_COMBO_BOX_TEXT(input_to));
 
     if (from == NULL || to == NULL || selected_class == NULL || strlen(date_text) == 0 || strlen(traveller) == 0){
         gtk_label_set_text(GTK_LABEL(label_status), "All fields are required!");
+        if(from) g_free(from); if(to) g_free(to); if(selected_class) g_free(selected_class);
         return;
     }
 
@@ -73,10 +83,12 @@ void on_list_link_click(GtkWidget *widget, gpointer data) {
      
     if (!is_number(traveller)){
         gtk_label_set_text(GTK_LABEL(label_status), "Number people must be a number!");
+        if(from) g_free(from); if(to) g_free(to); if(selected_class) g_free(selected_class);
         return;
     }
     if (strcmp(from, to) == 0){
         gtk_label_set_text(GTK_LABEL(label_status), "Departure airport and arrive airport must be different!");
+        if(from) g_free(from); if(to) g_free(to); if(selected_class) g_free(selected_class);
         return;
     }
     
@@ -84,6 +96,25 @@ void on_list_link_click(GtkWidget *widget, gpointer data) {
     
     GtkWidget *list_window = create_list_window();
     set_content(list_window);
+
+    if(from) g_free(from);
+    if(to) g_free(to);
+    if(selected_class) g_free(selected_class);
+}
+
+// --- LOGIC CHUYỂN TRANG MY ACCOUNT AN TOÀN ---
+
+gboolean safe_switch_to_account_view(gpointer data) {
+    (void)data;
+    GtkWidget *account_view = create_my_account_window();
+    set_content(account_view);
+    return FALSE; // Dừng timeout
+}
+
+void on_my_account_clicked(GtkWidget *widget, gpointer data) {
+    (void)widget; (void)data;
+    // Dùng timeout để đảm bảo xử lý sự kiện click hoàn tất trước khi hủy widget
+    g_timeout_add(150, safe_switch_to_account_view, NULL);
 }
 
 // ============================================================
@@ -91,6 +122,7 @@ void on_list_link_click(GtkWidget *widget, gpointer data) {
 // ============================================================
 
 static void on_window_realize(GtkWidget *widget, gpointer user_data) {
+    (void)widget; 
     GtkWidget *calendar = GTK_WIDGET(user_data);
     gtk_widget_hide(calendar);  
 }
@@ -106,28 +138,28 @@ static void on_calendar_day_selected(GtkCalendar *calendar, gpointer user_data) 
 }
 
 static gboolean on_input_box_focus_in(GtkWidget *widget, GdkEvent *event, gpointer user_data) {
+    (void)widget; (void)event;
     GtkWidget *calendar = GTK_WIDGET(user_data);
     gtk_widget_show(calendar);
     return FALSE;
 }
 
-// --- VẼ BACKGROUND (CAIRO) ---
 static gboolean on_draw_background(GtkWidget *widget, cairo_t *cr, gpointer user_data) {
+    (void)user_data;
+    if (!GTK_IS_WIDGET(widget) || !gtk_widget_get_realized(widget)) return FALSE;
+
     gint width = gtk_widget_get_allocated_width(widget);
     gint height = gtk_widget_get_allocated_height(widget);
 
-    // 1. Vẽ nền Gradient Tím
     cairo_pattern_t *pat_left = cairo_pattern_create_linear(0.0, 0.0, width, height);
-    cairo_pattern_add_color_stop_rgb(pat_left, 0.0, 0.45, 0.45, 0.95);  // Tím
+    cairo_pattern_add_color_stop_rgb(pat_left, 0.0, 0.45, 0.45, 0.95);
     cairo_pattern_add_color_stop_rgb(pat_left, 1.0, 0.40, 0.35, 0.90);  
     cairo_set_source(cr, pat_left);
     cairo_rectangle(cr, 0, 0, width, height); 
     cairo_fill(cr);
     cairo_pattern_destroy(pat_left);
 
-    // 2. Vẽ phần cong màu trắng
     cairo_set_source_rgb(cr, 1.0, 1.0, 1.0); 
-    
     double start_x = width * 0.75; 
     cairo_move_to(cr, start_x, 0); 
     cairo_curve_to(cr, 
@@ -139,7 +171,6 @@ static gboolean on_draw_background(GtkWidget *widget, cairo_t *cr, gpointer user
     cairo_close_path(cr);
     cairo_fill(cr);
 
-    // 3. Vẽ Máy Bay
     GError *error = NULL;
     GdkPixbuf *plane_pixbuf = gdk_pixbuf_new_from_file(PLANE_IMAGE_PATH, &error);
     if (plane_pixbuf) {
@@ -162,18 +193,16 @@ static gboolean on_draw_background(GtkWidget *widget, cairo_t *cr, gpointer user
     return FALSE;
 }
 
-// --- CSS CUSTOM ---
 void apply_custom_css(GtkWidget *widget) {
     GtkCssProvider *provider = gtk_css_provider_new();
     gtk_css_provider_load_from_data(provider,
-        // Ô nhập liệu
         "entry, combobox button, combobox { " 
         "   background-color: #ffffff; " 
         "   color: #333333; "
         "   border-radius: 10px; "
         "   border: 1px solid #e0e0e0; "
-        "   padding: 8px 12px; "  // Giảm padding
-        "   min-height: 40px; "   // Giảm chiều cao
+        "   padding: 8px 12px; "  
+        "   min-height: 40px; "   
         "   font-size: 14px; "
         "   font-family: 'Segoe UI', sans-serif; "
         "   box-shadow: 0 4px 6px rgba(0,0,0,0.05); "
@@ -182,8 +211,6 @@ void apply_custom_css(GtkWidget *widget) {
         "   border-color: #b3b3ff; "
         "   box-shadow: 0 0 0 3px rgba(255,255,255,0.3); " 
         "}\n"
-        
-        // Nút BOOK NOW
         "#btn-book { "
         "   background-image: linear-gradient(to right, #FFC371, #FF5F6D); " 
         "   color: white; font-weight: 800; font-size: 16px; "
@@ -193,23 +220,17 @@ void apply_custom_css(GtkWidget *widget) {
         "   box-shadow: 0 5px 15px rgba(255, 95, 109, 0.4); "
         "}\n"
         "#btn-book:hover { transform: scale(1.05); box-shadow: 0 8px 20px rgba(255, 95, 109, 0.5); }\n"
-        
-        // Label trắng
         ".lbl-white { color: rgba(255,255,255,0.95); font-weight: 600; font-size: 13px; margin-bottom: 4px; }\n"
-        
-        // Tiêu đề lớn: Font đẹp hơn (Giảm size một chút)
         ".lbl-title { "
         "   color: white; "
         "   font-weight: 900; "
-        "   font-size: 36px; " /* Giảm size từ 40 -> 36 */
+        "   font-size: 36px; "
         "   font-family: 'Montserrat', 'Verdana', sans-serif; " 
-        "   margin-bottom: 25px; " /* Giảm margin bottom */
+        "   margin-bottom: 25px; "
         "   line-height: 1.2; "
         "   letter-spacing: 1px; "
         "   text-shadow: 0 2px 4px rgba(0,0,0,0.1); "
         "}\n"
-        
-        // --- 4 NÚT HEADER ---
         "#header-btn { "
         "   background: transparent; border: none; box-shadow: none; "
         "   color: #ffffff; "       
@@ -218,7 +239,6 @@ void apply_custom_css(GtkWidget *widget) {
         "   font-family: 'Segoe UI', sans-serif; "
         "   padding: 10px 20px; "   
         "   margin: 0 10px; "       
-        "   text-transform: uppercase; " 
         "}\n"
         "#header-btn:hover { "
         "   color: #FFC371; "       
@@ -233,6 +253,7 @@ void apply_custom_css(GtkWidget *widget) {
     
     GtkStyleContext *context = gtk_widget_get_style_context(widget);
     gtk_style_context_add_provider(context, GTK_STYLE_PROVIDER(provider), GTK_STYLE_PROVIDER_PRIORITY_USER);
+    g_object_unref(provider);
 }
 
 GtkWidget* create_styled_input(const gchar *placeholder) {
@@ -248,20 +269,15 @@ GtkWidget* create_styled_combo() {
     return combo;
 }
 
-// --- FORM BÊN TRÁI (Đã thu gọn margin) ---
 GtkWidget* create_left_form() {
-    // Giảm khoảng cách các widget trong form
-    GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12); // Spacing 20 -> 12
+    GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12); 
     gtk_widget_set_margin_start(vbox, 80); 
-    
-    // --- SỬA QUAN TRỌNG: Đẩy form lên cao hơn ---
-    gtk_widget_set_margin_top(vbox, 40); // Margin top 100 -> 40
+    gtk_widget_set_margin_top(vbox, 40); 
     
     gtk_widget_set_valign(vbox, GTK_ALIGN_START); 
     gtk_widget_set_halign(vbox, GTK_ALIGN_START);
     gtk_widget_set_size_request(vbox, 500, -1); 
 
-    // Title
     GtkWidget *lbl_title = gtk_label_new("WHERE WOULD YOU\nLIKE TO GO ?");
     gtk_widget_set_halign(lbl_title, GTK_ALIGN_START);
     gtk_label_set_justify(GTK_LABEL(lbl_title), GTK_JUSTIFY_LEFT);
@@ -270,7 +286,6 @@ GtkWidget* create_left_form() {
     apply_custom_css(lbl_title);
     gtk_box_pack_start(GTK_BOX(vbox), lbl_title, FALSE, FALSE, 0);
 
-    // From
     GtkWidget *box_from = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     GtkWidget *lbl_from = gtk_label_new("From");
     gtk_widget_set_halign(lbl_from, GTK_ALIGN_START);
@@ -286,7 +301,6 @@ GtkWidget* create_left_form() {
     gtk_box_pack_start(GTK_BOX(box_from), input_from, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(vbox), box_from, FALSE, FALSE, 0);
 
-    // To
     GtkWidget *box_to = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     GtkWidget *lbl_to = gtk_label_new("To");
     gtk_widget_set_halign(lbl_to, GTK_ALIGN_START);
@@ -302,10 +316,8 @@ GtkWidget* create_left_form() {
     gtk_box_pack_start(GTK_BOX(box_to), input_to, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(vbox), box_to, FALSE, FALSE, 0);
 
-    // Row: Date | Passenger | Class
     GtkWidget *hbox_row1 = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 15);
 
-    // Date
     GtkWidget *box_date = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     GtkWidget *lbl_date = gtk_label_new("Date");
     gtk_widget_set_halign(lbl_date, GTK_ALIGN_START);
@@ -320,13 +332,12 @@ GtkWidget* create_left_form() {
     gtk_box_pack_start(GTK_BOX(date_cont), calendar, FALSE, FALSE, 0);
     g_signal_connect(entry_date, "focus-in-event", G_CALLBACK(on_input_box_focus_in), calendar);
     g_signal_connect(calendar, "day-selected", G_CALLBACK(on_calendar_day_selected), entry_date);
-    g_signal_connect(gtk_widget_get_toplevel(calendar), "realize", G_CALLBACK(on_window_realize), calendar);
+    // Lưu ý: Đã xóa signal "realize" gây leak bộ nhớ
     input_departure = date_cont;
 
     gtk_box_pack_start(GTK_BOX(box_date), lbl_date, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(box_date), date_cont, FALSE, FALSE, 0);
 
-    // Passengers
     GtkWidget *box_pass = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     GtkWidget *lbl_pass = gtk_label_new("Passenger");
     gtk_widget_set_halign(lbl_pass, GTK_ALIGN_START);
@@ -338,7 +349,6 @@ GtkWidget* create_left_form() {
     gtk_box_pack_start(GTK_BOX(box_pass), lbl_pass, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(box_pass), input_traveller, FALSE, FALSE, 0);
 
-    // Class
     GtkWidget *box_class = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     GtkWidget *lbl_class = gtk_label_new("Class");
     gtk_widget_set_halign(lbl_class, GTK_ALIGN_START);
@@ -360,21 +370,16 @@ GtkWidget* create_left_form() {
 
     gtk_box_pack_start(GTK_BOX(vbox), hbox_row1, FALSE, FALSE, 10);
 
-    // Button BOOK NOW
     GtkWidget *btn_book = gtk_button_new_with_label("BOOK NOW");
     gtk_widget_set_name(btn_book, "btn-book");
-    gtk_widget_set_size_request(btn_book, 180, 45); // Giảm chiều cao nút
+    gtk_widget_set_size_request(btn_book, 180, 45); 
     gtk_widget_set_halign(btn_book, GTK_ALIGN_START);
-    
-    // Giảm margin top của nút
     gtk_widget_set_margin_top(btn_book, 10); 
-    
     apply_custom_css(btn_book);
     g_signal_connect(btn_book, "clicked", G_CALLBACK(on_list_link_click), homepage_window);
 
     gtk_box_pack_start(GTK_BOX(vbox), btn_book, FALSE, FALSE, 5);
 
-    // Error Label
     label_status = gtk_label_new("");
     GtkCssProvider *err_css = gtk_css_provider_new();
     gtk_css_provider_load_from_data(err_css, "label { color: #ffe066; font-size: 13px; }", -1, NULL); 
@@ -384,61 +389,50 @@ GtkWidget* create_left_form() {
     return vbox;
 }
 
-// --- HEADER CŨ ---
-GtkWidget* create_old_style_header(GtkWidget *main_box) {
-    GtkWidget *buttons[5]; 
-    GtkWidget *header_hbox = create_header(buttons, main_box);
+// --- HÀM TẠO HEADER NỘI BỘ (KHÔNG DÙNG COMPONENT.C ĐỂ TRÁNH LỖI) ---
+GtkWidget* create_header_local_safe(GtkWidget *main_box) {
+    (void)main_box;
+    GtkWidget *header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_widget_set_size_request(header, 1060, 40);
+    gtk_widget_set_margin_top(header, 25); // Canh chỉnh lại margin
+    gtk_widget_set_margin_bottom(header, 10);
+    gtk_widget_set_halign(header, GTK_ALIGN_CENTER); 
+
+    // Logo
+    GtkWidget *logo = gtk_image_new_from_file("../assets/images/logo.png");
+    gtk_box_pack_start(GTK_BOX(header), logo, FALSE, FALSE, 10);
+    gtk_widget_set_margin_end(logo, 200);
+
+    // Menu Box
+    GtkWidget *menu_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_box_set_homogeneous(GTK_BOX(menu_box), TRUE);
     
-    GList *children = gtk_container_get_children(GTK_CONTAINER(header_hbox));
-    if (children) {
-        GtkWidget *logo_box = GTK_WIDGET(children->data); 
-        if (GTK_IS_WIDGET(logo_box)) {
-            gtk_widget_destroy(logo_box); 
-        }
-        g_list_free(children);
+    // Tạo các nút bấm đơn giản (GtkButton) để tránh lỗi bộ nhớ của Radio/Toggle
+    GtkWidget *btn_home = gtk_button_new_with_label("HOME");
+    GtkWidget *btn_ticket = gtk_button_new_with_label("MY BOOKINGS");
+    GtkWidget *btn_account = gtk_button_new_with_label("MY ACCOUNT");
+    GtkWidget *btn_noti = gtk_button_new_with_label("NOTIFICATIONS");
+
+    // CSS chung cho nút
+    GtkWidget *buttons[] = {btn_home, btn_ticket, btn_account, btn_noti, NULL};
+    for(int i=0; buttons[i]!=NULL; i++) {
+        gtk_widget_set_name(buttons[i], "header-btn");
+        apply_custom_css(buttons[i]);
+        gtk_widget_set_size_request(buttons[i], 120, 40);
+        gtk_box_pack_start(GTK_BOX(menu_box), buttons[i], TRUE, TRUE, 10);
     }
 
-    // Giảm margin top của Header
-    gtk_widget_set_margin_top(header_hbox, 15); // 30 -> 15
-    gtk_widget_set_halign(header_hbox, GTK_ALIGN_CENTER); 
-    gtk_widget_set_size_request(header_hbox, 900, 60); // Giảm chiều cao header
+    // Kết nối sự kiện
+    // Lưu ý: Nút Home không cần sự kiện vì đang ở Home rồi
+    g_signal_connect(btn_ticket, "clicked", G_CALLBACK(show_list_tickets), NULL);
+    g_signal_connect(btn_noti, "clicked", G_CALLBACK(show_notification), NULL);
+    
+    // --- SỰ KIỆN MY ACCOUNT ---
+    g_signal_connect(btn_account, "clicked", G_CALLBACK(on_my_account_clicked), NULL);
 
-    GList *current_children = gtk_container_get_children(GTK_CONTAINER(header_hbox));
-    if (current_children) {
-        GtkWidget *menu_box = GTK_WIDGET(current_children->data);
-        if (GTK_IS_CONTAINER(menu_box)) {
-            gtk_widget_set_halign(menu_box, GTK_ALIGN_CENTER);
-            
-            GList *btn_list = gtk_container_get_children(GTK_CONTAINER(menu_box));
-            int i = 0;
-            for (GList *l = btn_list; l != NULL; l = l->next) {
-                GtkWidget *btn = GTK_WIDGET(l->data);
-                if (GTK_IS_BUTTON(btn)) {
-                    gtk_widget_set_name(btn, "header-btn"); 
-                    apply_custom_css(btn);
-                    
-                    if (i == 0) {
-                        gtk_button_set_label(GTK_BUTTON(btn), "HOME");
-                        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(btn), TRUE);
-                    }
-                    else if (i == 1) gtk_button_set_label(GTK_BUTTON(btn), "MY BOOKINGS");
-                    else if (i == 2) gtk_button_set_label(GTK_BUTTON(btn), "MY ACCOUNT");
-                    else if (i == 3) {
-                        gtk_button_set_label(GTK_BUTTON(btn), "NOTIFICATIONS");
-                        g_signal_handlers_disconnect_by_func(btn, show_notification, NULL);
-                        g_signal_connect(btn, "clicked", G_CALLBACK(show_notification), NULL);
-                    }
-                    i++;
-                }
-            }
-            g_list_free(btn_list);
-        }
-        g_list_free(current_children);
-    }
-
-    return header_hbox;
+    gtk_box_pack_start(GTK_BOX(header), menu_box, TRUE, TRUE, 0);
+    return header;
 }
-
 
 GtkWidget* create_homepage_window() {
     GtkWidget *main_overlay = gtk_overlay_new();
@@ -451,7 +445,8 @@ GtkWidget* create_homepage_window() {
     gtk_widget_set_halign(content_box, GTK_ALIGN_FILL);
     gtk_widget_set_valign(content_box, GTK_ALIGN_FILL);
 
-    GtkWidget *header = create_old_style_header(content_box);
+    // Dùng hàm tạo header nội bộ an toàn
+    GtkWidget *header = create_header_local_safe(content_box);
     gtk_box_pack_start(GTK_BOX(content_box), header, FALSE, FALSE, 0);
 
     GtkWidget *form = create_left_form();

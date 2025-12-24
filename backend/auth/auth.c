@@ -92,17 +92,22 @@ bool register_user(const char *email, const char *name, const char *phone, const
     return true;
 }
 
-bool login_user(const char *email, const char *password, int *user_id) {
+// Thay thế hàm login_user cũ bằng hàm này:
+bool login_user(const char *email, const char *password, int *user_id, char *user_name) {
     char hashed_password[65];
     hash_password_func(password, hashed_password);
+    
     if (fetch_users(&user, &countUser) != 0){
         fprintf(stderr, "Failed to fetch users.\n");
         return false;
     }
+    
     for (int i = 0; i < countUser; i++){
         if (strcmp(user[i].email, email) == 0 && strcmp(user[i].password, hashed_password) == 0){
             *user_id = user[i].user_id;
-            printf("Login successfully\n");
+            // Thêm dòng này để copy tên user ra biến output
+            strcpy(user_name, user[i].name); 
+            printf("Login successfully: %s\n", user_name);
             return true;
         }
     }
