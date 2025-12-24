@@ -15,7 +15,7 @@
 #include <gtk/gtk.h>
 #include <pango/pango.h>
 #include <pango/pangocairo.h>
-
+GtkWidget* create_header_global();
 // Hàm tạo thanh Header (được dùng ở nhiều màn hình khác nhau)
 GtkWidget* create_header(GtkWidget **buttons, GtkWidget *parent_container);
 

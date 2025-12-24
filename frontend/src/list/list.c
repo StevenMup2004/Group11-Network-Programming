@@ -6,8 +6,11 @@
 #include "../ticket_detail/ticket_detail.h"
 #include "../component/component.h"
 #include "../global/global.h"
-#include "../homepage/homepage.h" 
+#include "../homepage/homepage.h"
+#include "../booklist/booklist.h"   
+#include "../my_account/my_account.h" 
 
+// --- BIẾN TOÀN CỤC ---
 GtkWidget *ticket_list; 
 GtkWidget *main_box;    
 GtkWidget *list_window;
@@ -15,34 +18,94 @@ int selected_day_index = 0;
 char *days[5];
 int num_days = 0;
 
-// --- HÀM CSS: GIAO DIỆN ĐẬM ĐÀ & TƯƠNG PHẢN CAO ---
+// --- KHAI BÁO PROTOTYPE NGOÀI ---
+extern void show_notification(GtkWidget *widget, gpointer data);
+extern void show_list_tickets(GtkWidget *widget, gpointer data); 
+
+// ============================================================
+// PHẦN 1: LOGIC CHUYỂN TRANG AN TOÀN (SAFE SWITCH)
+// ============================================================
+
+// 1. Về trang chủ
+static gboolean safe_switch_to_home(gpointer data) {
+    (void)data;
+    GtkWidget *home_window = create_homepage_window();
+    set_content(home_window);
+    return FALSE;
+}
+
+// THÊM 'static' ĐỂ TRÁNH LỖI MULTIPLE DEFINITION
+static void on_nav_home_clicked(GtkWidget *widget, gpointer data) {
+    (void)widget; (void)data;
+    g_idle_add(safe_switch_to_home, NULL);
+}
+
+// 2. Sang My Account
+static gboolean safe_switch_to_account(gpointer data) {
+    (void)data;
+    GtkWidget *account_window = create_my_account_window();
+    set_content(account_window);
+    return FALSE;
+}
+
+// THÊM 'static' ĐỂ TRÁNH LỖI MULTIPLE DEFINITION
+static void on_nav_account_clicked(GtkWidget *widget, gpointer data) {
+    (void)widget; (void)data;
+    g_idle_add(safe_switch_to_account, NULL);
+}
+
+// ============================================================
+// PHẦN 2: CSS STYLE
+// ============================================================
 void apply_list_css() {
     GtkCssProvider *provider = gtk_css_provider_new();
     gtk_css_provider_load_from_data(provider,
+        // 1. NỀN GRADIENT CHUNG
         "window { "
         "   background-image: linear-gradient(135deg, #2E3192, #1BFFFF); "
         "   font-family: 'Segoe UI', 'Montserrat', sans-serif; "
         "}\n"
         
+        // 2. FIX LỖI NỀN TRẮNG
+        "scrolledwindow, viewport, list, listbox { "
+        "   background-color: transparent; "
+        "   background-image: none; "
+        "   border: none; "
+        "}\n"
+
+        // 3. HEADER BUTTONS
         "#list-header-btn { "
-        "   background: transparent; border: none; box-shadow: none; "
-        "   color: #ffffff; "
+        "   background-color: transparent; "
+        "   background-image: none; "
+        "   border: none; "
+        "   box-shadow: none; "
+        "   color: rgba(255,255,255,0.8); "
         "   font-weight: 900; font-size: 16px; "      
         "   padding: 12px 25px; margin: 0 10px; "
         "   text-transform: uppercase; letter-spacing: 1px; "
         "   border-bottom: 3px solid transparent; "
+        "   border-radius: 0; "
         "}\n"
         "#list-header-btn:hover { "
         "   color: #FFD700; "
         "   text-shadow: 0 0 10px rgba(255, 215, 0, 0.6); "
+        "   background-color: transparent; "
+        "   box-shadow: none; "
         "}\n"
-        "#list-header-btn:checked { "
-        "   color: #FFD700; border-bottom: 3px solid #FFD700; "
+        "#list-header-btn:checked, #list-header-btn:active { "
+        "   background-color: transparent; "
+        "   background-image: none; "
+        "   box-shadow: none; "
+        "   border: none; "
+        "   color: #FFD700; "
+        "   border-bottom: 3px solid #FFD700; "
         "}\n"
+        "#list-header-btn:focus { outline: none; box-shadow: none; }\n"
 
+        // 4. DAY BUTTONS
         ".day-btn { "
         "   background-color: rgba(0, 0, 0, 0.2); "
-        "   color: #e0e0e0; font-weight: 700; font-size: 14px; "
+        "   color: #000000; font-weight: 700; font-size: 14px; "
         "   border-radius: 12px; border: 1px solid rgba(255,255,255,0.2); "
         "   padding: 10px 15px; margin: 0 5px; "
         "}\n"
@@ -53,6 +116,7 @@ void apply_list_css() {
         "}\n"
         ".day-btn:hover { background-color: rgba(0,0,0,0.4); color: white; }\n"
 
+        // 5. OTHER UI ELEMENTS
         ".filter-label { color: #ffffff; font-weight: 800; font-size: 14px; margin-right: 10px; }\n"
         "combobox button { "
         "   background-color: #ffffff; color: #333; font-weight: 700; "
@@ -90,9 +154,12 @@ void apply_list_css() {
     
     gtk_style_context_add_provider_for_screen(gdk_screen_get_default(), 
         GTK_STYLE_PROVIDER(provider), GTK_STYLE_PROVIDER_PRIORITY_USER);
+    g_object_unref(provider);
 }
 
-// --- LOGIC ---
+// ============================================================
+// PHẦN 3: LOGIC XỬ LÝ
+// ============================================================
 void on_day_button_click(GtkWidget *widget, gpointer data) {
     (void)widget;
     selected_day_index = GPOINTER_TO_INT(data);
@@ -113,19 +180,9 @@ void on_detail_link_click(GtkWidget *widget, gpointer data) {
     set_content(detail_window);
 }
 
-// --- SORTING CALLBACK (Đã thêm hàm này để fix lỗi undefined reference) ---
 void on_sort_changed(GtkComboBox *combo, gpointer user_data) {
     (void)user_data;
     gint active_index = gtk_combo_box_get_active(combo);
-    // Giả sử bạn đã có các hàm sort_flights trong context này hoặc global
-    // Nếu chưa có, bạn cần copy lại các hàm sort từ version cũ.
-    // Ở đây tôi thêm logic cơ bản:
-    
-    // Gọi logic sort tương ứng (giữ nguyên logic cũ của bạn)
-    // sort_flights(TRUE/FALSE) ...
-    // Để tránh lỗi biên dịch nếu thiếu hàm sort, tôi gọi refresh tạm thời.
-    // Nếu bạn có code sort_flights ở trên, hãy uncomment.
-    // Tôi sẽ giả định các hàm sort đã được khai báo ở trên hoặc trong list.h
     
     extern void sort_flights(gboolean ascending);
     extern void sort_flights_by_duration(gboolean ascending);
@@ -138,7 +195,49 @@ void on_sort_changed(GtkComboBox *combo, gpointer user_data) {
     refresh_ticket_list(ticket_list);
 }
 
-// --- UI COMPONENTS ---
+// ============================================================
+// PHẦN 4: UI COMPONENTS
+// ============================================================
+
+GtkWidget* create_list_header(GtkWidget *main_box) {
+    (void)main_box;
+
+    GtkWidget *header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_widget_set_size_request(header, 900, 60);
+    gtk_widget_set_margin_top(header, 30);
+    gtk_widget_set_halign(header, GTK_ALIGN_CENTER);
+
+    GtkWidget *menu_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_box_set_homogeneous(GTK_BOX(menu_box), TRUE);
+    gtk_box_pack_start(GTK_BOX(header), menu_box, TRUE, TRUE, 0);
+
+    // 1. HOME
+    GtkWidget *btn_home = gtk_button_new_with_label("HOME");
+    gtk_widget_set_name(btn_home, "list-header-btn");
+    g_signal_connect(btn_home, "clicked", G_CALLBACK(on_nav_home_clicked), NULL);
+    gtk_box_pack_start(GTK_BOX(menu_box), btn_home, TRUE, TRUE, 10);
+
+    // 2. MY BOOKINGS (Nút thường)
+    GtkWidget *btn_booking = gtk_button_new_with_label("MY BOOKINGS");
+    gtk_widget_set_name(btn_booking, "list-header-btn");
+    g_signal_connect(btn_booking, "clicked", G_CALLBACK(show_list_tickets), NULL);
+    gtk_box_pack_start(GTK_BOX(menu_box), btn_booking, TRUE, TRUE, 10);
+
+    // 3. MY ACCOUNT
+    GtkWidget *btn_account = gtk_button_new_with_label("MY ACCOUNT");
+    gtk_widget_set_name(btn_account, "list-header-btn");
+    g_signal_connect(btn_account, "clicked", G_CALLBACK(on_nav_account_clicked), NULL);
+    gtk_box_pack_start(GTK_BOX(menu_box), btn_account, TRUE, TRUE, 10);
+
+    // 4. NOTIFICATIONS
+    GtkWidget *btn_noti = gtk_button_new_with_label("NOTIFICATIONS");
+    gtk_widget_set_name(btn_noti, "list-header-btn");
+    g_signal_connect(btn_noti, "clicked", G_CALLBACK(show_notification), NULL);
+    gtk_box_pack_start(GTK_BOX(menu_box), btn_noti, TRUE, TRUE, 10);
+
+    return header;
+}
+
 GtkWidget* create_day_selector() {
     GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
     gtk_widget_set_halign(box, GTK_ALIGN_CENTER);
@@ -336,45 +435,6 @@ void sort_flights_by_duration(gboolean ascending) {
             }
         }
     }
-}
-
-GtkWidget* create_list_header(GtkWidget *main_box) {
-    GtkWidget *buttons[5];
-    GtkWidget *header = create_header(buttons, main_box);
-    
-    GList *children = gtk_container_get_children(GTK_CONTAINER(header));
-    if (children) {
-        gtk_widget_destroy(GTK_WIDGET(children->data)); 
-        g_list_free(children);
-    }
-
-    gtk_widget_set_halign(header, GTK_ALIGN_CENTER);
-    gtk_widget_set_margin_top(header, 30);
-    gtk_widget_set_size_request(header, 900, 60);
-
-    GList *curr_children = gtk_container_get_children(GTK_CONTAINER(header));
-    if (curr_children) {
-        GtkWidget *menu_box = GTK_WIDGET(curr_children->data);
-        if (GTK_IS_CONTAINER(menu_box)) {
-            gtk_widget_set_halign(menu_box, GTK_ALIGN_CENTER);
-            GList *btns = gtk_container_get_children(GTK_CONTAINER(menu_box));
-            int i=0;
-            for (GList *l = btns; l != NULL; l = l->next) {
-                GtkWidget *btn = GTK_WIDGET(l->data);
-                if (GTK_IS_BUTTON(btn)) {
-                    gtk_widget_set_name(btn, "list-header-btn"); 
-                    if (i==0) gtk_button_set_label(GTK_BUTTON(btn), "HOME");
-                    else if (i==1) gtk_button_set_label(GTK_BUTTON(btn), "MY BOOKINGS");
-                    else if (i==2) gtk_button_set_label(GTK_BUTTON(btn), "MY ACCOUNT");
-                    else if (i==3) gtk_button_set_label(GTK_BUTTON(btn), "HELP CENTER");
-                    i++;
-                }
-            }
-            g_list_free(btns);
-        }
-        g_list_free(curr_children);
-    }
-    return header;
 }
 
 GtkWidget* create_list_window() {

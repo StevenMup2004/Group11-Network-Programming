@@ -197,10 +197,10 @@ void apply_custom_css(GtkWidget *widget) {
     GtkCssProvider *provider = gtk_css_provider_new();
     gtk_css_provider_load_from_data(provider,
         "entry, combobox button, combobox { " 
-        "   background-color: #ffffff; " 
+        "   background-color: #ffffffff; " 
         "   color: #333333; "
         "   border-radius: 10px; "
-        "   border: 1px solid #e0e0e0; "
+        "   border: 1px solid #524141ff; "
         "   padding: 8px 12px; "  
         "   min-height: 40px; "   
         "   font-size: 14px; "
@@ -233,7 +233,7 @@ void apply_custom_css(GtkWidget *widget) {
         "}\n"
         "#header-btn { "
         "   background: transparent; border: none; box-shadow: none; "
-        "   color: #ffffff; "       
+        "   color: #000000; "       
         "   font-weight: 800; "     
         "   font-size: 15px; "      
         "   font-family: 'Segoe UI', sans-serif; "
@@ -390,24 +390,31 @@ GtkWidget* create_left_form() {
 }
 
 // --- HÀM TẠO HEADER NỘI BỘ (KHÔNG DÙNG COMPONENT.C ĐỂ TRÁNH LỖI) ---
+// --- HÀM TẠO HEADER NỘI BỘ (KHÔNG DÙNG COMPONENT.C ĐỂ TRÁNH LỖI) ---
+// Đã sửa lỗi menu bị trôi sang phải và chìm vào nền trắng
 GtkWidget* create_header_local_safe(GtkWidget *main_box) {
     (void)main_box;
+    
+    // Tạo container chính cho Header
     GtkWidget *header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
     gtk_widget_set_size_request(header, 1060, 40);
-    gtk_widget_set_margin_top(header, 25); // Canh chỉnh lại margin
+    gtk_widget_set_margin_top(header, 25); 
     gtk_widget_set_margin_bottom(header, 10);
+    // Giữ header ở giữa màn hình, nhưng các phần tử bên trong sẽ được xếp từ trái sang
     gtk_widget_set_halign(header, GTK_ALIGN_CENTER); 
 
-    // Logo
+    // --- 1. LOGO ---
     GtkWidget *logo = gtk_image_new_from_file("../assets/images/logo.png");
     gtk_box_pack_start(GTK_BOX(header), logo, FALSE, FALSE, 10);
-    gtk_widget_set_margin_end(logo, 200);
-
-    // Menu Box
-    GtkWidget *menu_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-    gtk_box_set_homogeneous(GTK_BOX(menu_box), TRUE);
     
-    // Tạo các nút bấm đơn giản (GtkButton) để tránh lỗi bộ nhớ của Radio/Toggle
+    // [QUAN TRỌNG] Giảm khoảng cách đẩy menu ra xa (Giảm từ 200 xuống 30)
+    gtk_widget_set_margin_end(logo, 30);
+
+    // --- 2. MENU BOX ---
+    GtkWidget *menu_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_box_set_homogeneous(GTK_BOX(menu_box), TRUE); // Các nút to đều nhau
+    
+    // Tạo các nút bấm
     GtkWidget *btn_home = gtk_button_new_with_label("HOME");
     GtkWidget *btn_ticket = gtk_button_new_with_label("MY BOOKINGS");
     GtkWidget *btn_account = gtk_button_new_with_label("MY ACCOUNT");
@@ -417,23 +424,26 @@ GtkWidget* create_header_local_safe(GtkWidget *main_box) {
     GtkWidget *buttons[] = {btn_home, btn_ticket, btn_account, btn_noti, NULL};
     for(int i=0; buttons[i]!=NULL; i++) {
         gtk_widget_set_name(buttons[i], "header-btn");
-        apply_custom_css(buttons[i]);
+        apply_custom_css(buttons[i]); // Nhớ kiểm tra file CSS có class header-btn
         gtk_widget_set_size_request(buttons[i], 120, 40);
         gtk_box_pack_start(GTK_BOX(menu_box), buttons[i], TRUE, TRUE, 10);
     }
 
     // Kết nối sự kiện
-    // Lưu ý: Nút Home không cần sự kiện vì đang ở Home rồi
     g_signal_connect(btn_ticket, "clicked", G_CALLBACK(show_list_tickets), NULL);
     g_signal_connect(btn_noti, "clicked", G_CALLBACK(show_notification), NULL);
-    
-    // --- SỰ KIỆN MY ACCOUNT ---
     g_signal_connect(btn_account, "clicked", G_CALLBACK(on_my_account_clicked), NULL);
 
-    gtk_box_pack_start(GTK_BOX(header), menu_box, TRUE, TRUE, 0);
+    // --- 3. ĐÓNG GÓI MENU VÀO HEADER ---
+    // [QUAN TRỌNG] Đổi TRUE, TRUE thành FALSE, FALSE 
+    // Việc này ngăn menu giãn ra hết phần còn lại bên phải (nơi có nền trắng)
+    gtk_box_pack_start(GTK_BOX(header), menu_box, FALSE, FALSE, 0);
+    
+    // Đảm bảo menu dính chặt về phía bên trái (phía logo)
+    gtk_widget_set_halign(menu_box, GTK_ALIGN_START);
+
     return header;
 }
-
 GtkWidget* create_homepage_window() {
     GtkWidget *main_overlay = gtk_overlay_new();
     

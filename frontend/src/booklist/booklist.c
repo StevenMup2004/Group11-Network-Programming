@@ -5,35 +5,94 @@
 #include <math.h>
 #include <string.h>
 #include <stdlib.h>
+#include <sys/socket.h> // FIX: Thêm thư viện này để sửa lỗi send/recv
 #include "../global/global.h"
 #include "../component/component.h"
 #include "../list/list.h" 
 #include "../homepage/homepage.h"
+#include "../my_account/my_account.h"
 
-// --- KHAI BÁO PROTOTYPE (Để tránh lỗi biên dịch) ---
-void show_list_tickets(GtkWidget *widget, gpointer data);
+// --- KHAI BÁO PROTOTYPE NGOÀI ---
+extern void show_notification(GtkWidget *widget, gpointer data);
 
-// --- CSS STYLE (ĐÃ SỬA CHO GTK3) ---
+// ============================================================
+// PHẦN 1: LOGIC CHUYỂN TRANG AN TOÀN (SAFE SWITCH)
+// ============================================================
+
+// 1. Về trang chủ
+static gboolean safe_switch_to_home(gpointer data) {
+    (void)data;
+    GtkWidget *home_window = create_homepage_window();
+    set_content(home_window);
+    return FALSE;
+}
+
+void on_nav_home_clicked(GtkWidget *widget, gpointer data) {
+    (void)widget; (void)data;
+    g_idle_add(safe_switch_to_home, NULL);
+}
+
+// 2. Sang My Account
+static gboolean safe_switch_to_account(gpointer data) {
+    (void)data;
+    GtkWidget *account_window = create_my_account_window();
+    set_content(account_window);
+    return FALSE;
+}
+
+void on_nav_account_clicked(GtkWidget *widget, gpointer data) {
+    (void)widget; (void)data;
+    g_idle_add(safe_switch_to_account, NULL);
+}
+
+// ============================================================
+// PHẦN 2: CSS STYLE (ĐÃ FIX LỖI KHUNG VIỀN)
+// ============================================================
 void apply_booklist_css() {
     GtkCssProvider *provider = gtk_css_provider_new();
     gtk_css_provider_load_from_data(provider,
-        // 1. Nền Gradient
+        // 1. Nền Gradient chung
         "window { "
         "   background-image: linear-gradient(135deg, #2E3192, #1BFFFF); "
         "   font-family: 'Segoe UI', sans-serif; "
         "}\n"
         
-        // 2. Header Buttons
+        // 2. HEADER BUTTONS
         "#booklist-header-btn { "
-        "   background: transparent; border: none; box-shadow: none; "
-        "   color: rgba(255,255,255,0.8); font-weight: 900; font-size: 16px; "
+        "   background-color: transparent; "
+        "   background-image: none; "
+        "   border: none; "
+        "   box-shadow: none; "
+        "   color: rgba(255,255,255,0.8); "
+        "   font-weight: 900; font-size: 16px; "
         "   padding: 12px 25px; margin: 0 10px; "
         "   border-bottom: 3px solid transparent; "
+        "   border-radius: 0; "
         "}\n"
-        "#booklist-header-btn:hover { color: #FFD700; text-shadow: 0 0 10px rgba(255, 215, 0, 0.6); }\n"
-        "#booklist-header-btn:checked { color: #FFD700; border-bottom: 3px solid #FFD700; }\n"
 
-        // 3. Booked Ticket Card
+        "#booklist-header-btn:hover { "
+        "   color: #FFD700; "
+        "   text-shadow: 0 0 10px rgba(255, 215, 0, 0.6); "
+        "   background-color: transparent; " 
+        "   box-shadow: none; "
+        "}\n"
+
+        // Trạng thái Checked/Active: Trong suốt, chỉ hiện gạch chân vàng
+        "#booklist-header-btn:checked, #booklist-header-btn:active { "
+        "   background-color: transparent; "
+        "   background-image: none; "
+        "   box-shadow: none; "
+        "   border: none; "
+        "   color: #FFD700; "
+        "   border-bottom: 3px solid #FFD700; "
+        "}\n"
+        
+        "#booklist-header-btn:focus { "
+        "   outline: none; "
+        "   box-shadow: none; "
+        "}\n"
+
+        // 3. BOOKED CARD
         ".booked-card { "
         "   background-color: #ffffff; "
         "   border-radius: 20px; "
@@ -42,7 +101,7 @@ void apply_booklist_css() {
         "}\n"
         ".booked-card:hover { box-shadow: 0 20px 45px rgba(0,0,0,0.3); }\n"
 
-        // 4. Typography
+        // 4. TYPOGRAPHY
         ".airline-label { font-weight: 900; font-size: 18px; color: #223A60; }\n"
         ".time-huge { font-weight: 900; font-size: 30px; color: #2a0845; }\n"
         ".airport-code { "
@@ -52,7 +111,7 @@ void apply_booklist_css() {
         ".price-booked { font-weight: 900; font-size: 24px; color: #27ae60; }\n"
         ".seat-info { color: #555; font-weight: 600; font-size: 14px; }\n"
 
-        // 5. Buttons
+        // 5. BUTTONS
         ".btn-print { "
         "   background-image: linear-gradient(to right, #3498db, #2980b9); "
         "   color: white; font-weight: bold; border-radius: 15px; border: none; "
@@ -65,16 +124,20 @@ void apply_booklist_css() {
         "}\n"
         ".btn-cancel:hover { background-color: #bdc3c7; color: #c0392b; }\n"
 
-        // 6. No Ticket Label
+        // 6. NO TICKET
         ".no-ticket { color: white; font-size: 24px; font-weight: 300; opacity: 0.8; }\n"
         
         , -1, NULL);
     
     gtk_style_context_add_provider_for_screen(gdk_screen_get_default(), 
         GTK_STYLE_PROVIDER(provider), GTK_STYLE_PROVIDER_PRIORITY_USER);
+    
+    g_object_unref(provider);
 }
 
-// --- LOGIC IN VÉ (PDF) ---
+// ============================================================
+// PHẦN 3: LOGIC IN VÉ (PDF)
+// ============================================================
 static void draw_ticket_for_pdf(cairo_t *cr, double width, double height, const Ticket *ticket) {
     cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
     cairo_rectangle(cr, 0, 0, width, height);
@@ -94,7 +157,7 @@ static void draw_ticket_for_pdf(cairo_t *cr, double width, double height, const 
     cairo_move_to(cr, 50, 100);
     cairo_show_text(cr, ticket->airplane_name);
 
-    char buffer[256];
+    char buffer[512]; // FIX: Tăng size buffer
     snprintf(buffer, sizeof(buffer), "From: %s", extract_middle_string(ticket->departure_airport));
     cairo_move_to(cr, 50, 140);
     cairo_show_text(cr, buffer);
@@ -142,7 +205,9 @@ void on_print_clicked(GtkWidget *widget, gpointer data) {
     gtk_widget_destroy(dialog);
 }
 
-// --- LOGIC HỦY VÉ ---
+// ============================================================
+// PHẦN 4: LOGIC HỦY VÉ
+// ============================================================
 typedef struct {
     int booking_id;
 } CancelParams;
@@ -181,59 +246,52 @@ void on_cancel_clicked(GtkWidget *widget, gpointer data) {
     gtk_widget_destroy(dialog);
 }
 
-// --- GIAO DIỆN ---
+// ============================================================
+// PHẦN 5: GIAO DIỆN (HEADER, CARD, LIST)
+// ============================================================
 
-// Tạo Header với logic xử lý nút bấm
 GtkWidget* create_booklist_header(GtkWidget *main_box) {
-    GtkWidget *buttons[5];
-    GtkWidget *header = create_header(buttons, main_box);
-    
-    // Xóa logo cũ trong header chung nếu có
-    GList *children = gtk_container_get_children(GTK_CONTAINER(header));
-    if (children) {
-        gtk_widget_destroy(GTK_WIDGET(children->data));
-        g_list_free(children);
-    }
+    (void)main_box;
 
-    gtk_widget_set_halign(header, GTK_ALIGN_CENTER);
-    gtk_widget_set_margin_top(header, 30);
+    // 1. Tạo Container
+    GtkWidget *header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
     gtk_widget_set_size_request(header, 900, 60);
+    gtk_widget_set_margin_top(header, 30);
+    gtk_widget_set_halign(header, GTK_ALIGN_CENTER);
 
-    // Duyệt và tùy chỉnh các nút
-    GList *curr_children = gtk_container_get_children(GTK_CONTAINER(header));
-    if (curr_children) {
-        GtkWidget *menu_box = GTK_WIDGET(curr_children->data);
-        if (GTK_IS_CONTAINER(menu_box)) {
-            gtk_widget_set_halign(menu_box, GTK_ALIGN_CENTER);
-            GList *btns = gtk_container_get_children(GTK_CONTAINER(menu_box));
-            int i=0;
-            for (GList *l = btns; l != NULL; l = l->next) {
-                GtkWidget *btn = GTK_WIDGET(l->data);
-                if (GTK_IS_BUTTON(btn)) {
-                    gtk_widget_set_name(btn, "booklist-header-btn");
-                    if (i==0) gtk_button_set_label(GTK_BUTTON(btn), "HOME");
-                    else if (i==1) {
-                        gtk_button_set_label(GTK_BUTTON(btn), "MY BOOKINGS");
-                        
-                        // --- FIX LỖI LOOP: Chặn signal trước khi set active ---
-                        g_signal_handlers_block_by_func(btn, show_list_tickets, NULL);
-                        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(btn), TRUE);
-                        g_signal_handlers_unblock_by_func(btn, show_list_tickets, NULL);
-                        // ----------------------------------------------------
-                    }
-                    else if (i==2) gtk_button_set_label(GTK_BUTTON(btn), "MY ACCOUNT");
-                    else if (i==3) gtk_button_set_label(GTK_BUTTON(btn), "NOTIFICATIONS"); // Đổi tên
-                    i++;
-                }
-            }
-            g_list_free(btns);
-        }
-        g_list_free(curr_children);
-    }
+    // 2. Menu Box
+    GtkWidget *menu_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_box_set_homogeneous(GTK_BOX(menu_box), TRUE);
+    gtk_box_pack_start(GTK_BOX(header), menu_box, TRUE, TRUE, 0);
+
+    // 3. Buttons (Tạo thủ công để kiểm soát ID và Style)
+    // Nút HOME
+    GtkWidget *btn_home = gtk_button_new_with_label("HOME");
+    gtk_widget_set_name(btn_home, "booklist-header-btn");
+    g_signal_connect(btn_home, "clicked", G_CALLBACK(on_nav_home_clicked), NULL);
+    gtk_box_pack_start(GTK_BOX(menu_box), btn_home, TRUE, TRUE, 10);
+
+    // Nút MY BOOKINGS (Toggle Button)
+    GtkWidget *btn_booking = gtk_toggle_button_new_with_label("MY BOOKINGS");
+    gtk_widget_set_name(btn_booking, "booklist-header-btn");
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(btn_booking), TRUE);
+    gtk_box_pack_start(GTK_BOX(menu_box), btn_booking, TRUE, TRUE, 10);
+
+    // Nút MY ACCOUNT
+    GtkWidget *btn_account = gtk_button_new_with_label("MY ACCOUNT");
+    gtk_widget_set_name(btn_account, "booklist-header-btn");
+    g_signal_connect(btn_account, "clicked", G_CALLBACK(on_nav_account_clicked), NULL);
+    gtk_box_pack_start(GTK_BOX(menu_box), btn_account, TRUE, TRUE, 10);
+
+    // Nút NOTIFICATIONS
+    GtkWidget *btn_noti = gtk_button_new_with_label("NOTIFICATIONS");
+    gtk_widget_set_name(btn_noti, "booklist-header-btn");
+    g_signal_connect(btn_noti, "clicked", G_CALLBACK(show_notification), NULL);
+    gtk_box_pack_start(GTK_BOX(menu_box), btn_noti, TRUE, TRUE, 10);
+
     return header;
 }
 
-// Tạo thẻ vé
 GtkWidget* create_booked_card(Ticket *ticket) {
     GtkWidget *card = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
     GtkStyleContext *ctx = gtk_widget_get_style_context(card);
@@ -246,7 +304,7 @@ GtkWidget* create_booked_card(Ticket *ticket) {
     gtk_widget_set_margin_top(left_box, 20);
     gtk_widget_set_margin_bottom(left_box, 20);
 
-    // Row Top: Icon + Airline Name + ID
+    // Row Top
     GtkWidget *row_top = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
     GtkWidget *icon = gtk_image_new_from_icon_name("airplane-mode-symbolic", GTK_ICON_SIZE_DND);
     GtkWidget *lbl_name = gtk_label_new(ticket->airplane_name);
@@ -270,7 +328,6 @@ GtkWidget* create_booked_card(Ticket *ticket) {
     char time_only[10], date_val[20];
     split_date_time(ticket->departure_time, date_val, time_only);
     
-    // Departure
     GtkWidget *col_dep = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
     GtkWidget *lbl_dep = gtk_label_new(time_only);
     gtk_style_context_add_class(gtk_widget_get_style_context(lbl_dep), "time-huge");
@@ -279,7 +336,6 @@ GtkWidget* create_booked_card(Ticket *ticket) {
     gtk_box_pack_start(GTK_BOX(col_dep), lbl_dep, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(col_dep), lbl_dep_code, FALSE, FALSE, 0);
 
-    // Arrow
     GtkWidget *col_mid = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_widget_set_valign(col_mid, GTK_ALIGN_CENTER);
     gtk_widget_set_size_request(col_mid, 150, -1);
@@ -289,7 +345,6 @@ GtkWidget* create_booked_card(Ticket *ticket) {
     gtk_box_pack_start(GTK_BOX(col_mid), lbl_date, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(col_mid), visual, FALSE, FALSE, 0);
 
-    // Arrival
     char *end_time_str = calculate_end_time(time_only, ticket->duration_minutes * 60);
     GtkWidget *col_arr = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
     GtkWidget *lbl_arr = gtk_label_new(end_time_str);
@@ -305,7 +360,7 @@ GtkWidget* create_booked_card(Ticket *ticket) {
     gtk_box_pack_start(GTK_BOX(left_box), row_time, FALSE, FALSE, 0);
     
     // Seats
-    char seat_buff[100];
+    char seat_buff[512]; // FIX: Tăng size buffer
     snprintf(seat_buff, sizeof(seat_buff), "Seats: %s", ticket->list_ticket);
     GtkWidget *lbl_seats = gtk_label_new(seat_buff);
     gtk_style_context_add_class(gtk_widget_get_style_context(lbl_seats), "seat-info");
