@@ -186,8 +186,21 @@ void *handle_client(void *client_socket) {
         }
         else {
             memset(buffer, 0, BUFFER_SIZE);
-            recv(sock, buffer, sizeof(buffer), 0);
+            int bytes_received = recv(sock, buffer, sizeof(buffer), 0);
+            if (bytes_received <= 0) { // Xử lý nếu client ngắt kết nối đột ngột
+                close(sock);
+                free(client_socket);
+                return NULL;
+            }
             buffer[strcspn(buffer, "\n")] = 0;
+
+            // --- THÊM ĐOẠN NÀY (BẮT ĐẦU) ---
+            if (strncmp(buffer, "LOGOUT", 6) == 0) {
+                printf("User ID %d logged out.\n", user_id);
+                is_logged_in = false; // Quan trọng: Reset trạng thái về chưa đăng nhập
+                user_id = 0;
+                continue; // Quay lại đầu vòng lặp để chờ lệnh REGISTER/LOGIN
+            }
             if (strncmp(buffer, "GET FLIGHTS", strlen("GET FLIGHTS")) == 0){
                 if (fetch_flights(&flights, &count_flight) != 0) {
                     fprintf(stderr, "Failed to fetch flights.\n");

@@ -44,10 +44,16 @@ gboolean safe_switch_to_login(gpointer data) {
 
 void on_logout_clicked(GtkWidget *widget, gpointer data) {
     (void)widget; (void)data;
+
+    // --- THÊM ĐOẠN NÀY (BẮT ĐẦU) ---
+    // Gửi thông báo LOGOUT lên server để server biết mà reset trạng thái
+    char *msg = "LOGOUT";
+    send(sock, msg, strlen(msg), 0);
+    // --- THÊM ĐOẠN NÀY (KẾT THÚC) ---
+
     // Đợi xử lý xong sự kiện click rồi mới chuyển trang
     g_idle_add(safe_switch_to_login, NULL);
 }
-
 gboolean safe_switch_to_home(gpointer data) {
     (void)data;
     GtkWidget *home = create_homepage_window();
@@ -67,12 +73,16 @@ GtkWidget* create_my_account_window() {
     // 1. CSS
     GtkCssProvider *provider = gtk_css_provider_new();
     gtk_css_provider_load_from_data(provider,
-        "window { background-color: #f4f6f9; }"
+        // --- SỬA ĐỔI QUAN TRỌNG TẠI ĐÂY ---
+        // Sử dụng !important để ép buộc đổi màu nền thành xanh (#E3F2FD)
+        // và background-image: none để xóa gradient nếu bị dính từ trang khác.
+        "window { background-color: #E3F2FD !important; background-image: none !important; }"
+        
         "#profile-card { background-color: white; border-radius: 15px; padding: 40px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }"
         ".info-key { font-weight: bold; color: #555; font-size: 14px; }"
         ".info-val { font-weight: normal; color: #223A60; font-size: 16px; }"
-        "#btn-logout { background-color: #ff4d4d; color: white; border-radius: 8px; font-weight: bold; padding: 10px; }"
-        "#btn-back { background-color: #ccc; color: #333; border-radius: 8px; font-weight: bold; padding: 10px; }"
+        "#btn-logout { background-color: #ff4d4d; color: black; border-radius: 8px; font-weight: bold; padding: 10px; }"
+        "#btn-back { background-color: #ccc; color: black; border-radius: 8px; font-weight: bold; padding: 10px; }"
         , -1, NULL);
     
     GdkScreen *screen = gdk_screen_get_default();

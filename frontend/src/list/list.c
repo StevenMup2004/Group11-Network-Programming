@@ -14,7 +14,7 @@
 GtkWidget *ticket_list; 
 GtkWidget *main_box;    
 GtkWidget *list_window;
-int selected_day_index = 0; 
+int selected_day_index = 2; 
 char *days[5];
 int num_days = 0;
 
@@ -437,6 +437,7 @@ void sort_flights_by_duration(gboolean ascending) {
     }
 }
 
+
 GtkWidget* create_list_window() {
     GtkWidget *scrolled_window = gtk_scrolled_window_new(NULL, NULL);
     gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled_window), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
@@ -449,17 +450,30 @@ GtkWidget* create_list_window() {
     GtkWidget *header = create_list_header(main_box);
     gtk_box_pack_start(GTK_BOX(main_box), header, FALSE, FALSE, 0);
 
+    selected_day_index = 2; 
+
     GtkWidget *day_selector = create_day_selector();
     gtk_box_pack_start(GTK_BOX(main_box), day_selector, FALSE, FALSE, 0);
+
+    if (num_days > 0) {
+        filter_flights(flights, flight_count, tem_flights, &tem_flight_count, 
+                       airport_from, airport_to, days[2], class, number_seat_order);
+    }
+    // -------------------------------------------------------------
 
     GtkWidget *filter_box = create_filter_box();
     gtk_box_pack_start(GTK_BOX(main_box), filter_box, FALSE, FALSE, 10);
 
     ticket_list = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    
+    // 4. Tạo danh sách vé (Lúc này tem_flights đã có dữ liệu từ bước 3)
     GtkWidget *initial_list = create_ticket_list();
     gtk_box_pack_start(GTK_BOX(ticket_list), initial_list, TRUE, TRUE, 0);
     
     gtk_box_pack_start(GTK_BOX(main_box), ticket_list, TRUE, TRUE, 30);
+    
+    // Đảm bảo hiển thị tất cả widget con
+    gtk_widget_show_all(scrolled_window);
 
     return scrolled_window;
 }
