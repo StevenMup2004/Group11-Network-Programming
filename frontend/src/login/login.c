@@ -18,8 +18,7 @@ GtkWidget *entry_password;
 GtkWidget *label_status;
 
 /* Base path cho ảnh - Hãy đảm bảo đường dẫn này đúng với máy của bạn */
-#define IMG(path) "/home/nmkhoi/NetworkProject2/TicketTrail/TicketTrail/code/frontend/assets/images/" path
-
+#define IMG(path) "../assets/images/" path
 /* ===== Hàm tiện ích: tạo ô nhập có icon ===== */
 static GtkWidget* add_icon_entry(const char *icon_path,
                                  const char *placeholder,

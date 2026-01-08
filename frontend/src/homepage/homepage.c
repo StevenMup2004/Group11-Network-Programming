@@ -404,11 +404,11 @@ GtkWidget* create_header_local_safe(GtkWidget *main_box) {
     gtk_widget_set_halign(header, GTK_ALIGN_CENTER); 
 
     // --- 1. LOGO ---
-    GtkWidget *logo = gtk_image_new_from_file("../assets/images/logo.png");
-    gtk_box_pack_start(GTK_BOX(header), logo, FALSE, FALSE, 10);
+    //GtkWidget *logo = gtk_image_new_from_file("../assets/images/logo.png");
+    //gtk_box_pack_start(GTK_BOX(header), logo, FALSE, FALSE, 10);
     
     // [QUAN TRỌNG] Giảm khoảng cách đẩy menu ra xa (Giảm từ 200 xuống 30)
-    gtk_widget_set_margin_end(logo, 30);
+    // gtk_widget_set_margin_end(logo, 30);
 
     // --- 2. MENU BOX ---
     GtkWidget *menu_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);

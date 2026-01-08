@@ -333,8 +333,8 @@ GtkWidget *entry_username;
 GtkWidget *entry_phone;
 
 /* Base path cho ảnh */
-#define IMG(path) "/home/nmkhoi/NetworkProject2/TicketTrail/TicketTrail/code/frontend/assets/images/" path
-
+/* Base path cho ảnh - Dùng đường dẫn tương đối */
+#define IMG(path) "../assets/images/" path
 /* ===== add_icon_entry(): static để tránh trùng symbol ===== */
 static GtkWidget* add_icon_entry(const char *icon_path,
                                  const char *placeholder,
