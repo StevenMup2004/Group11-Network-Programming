@@ -290,7 +290,6 @@ GtkWidget* create_filter_box() {
     gtk_box_pack_start(GTK_BOX(box), combo_box, FALSE, FALSE, 0);
     return box;
 }
-
 GtkWidget* create_ticket_card(Flight flight) {
     GtkWidget *card = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
     GtkStyleContext *ctx = gtk_widget_get_style_context(card);
@@ -302,13 +301,29 @@ GtkWidget* create_ticket_card(Flight flight) {
     gtk_widget_set_margin_top(left_box, 20);
     gtk_widget_set_margin_bottom(left_box, 20);
 
+    // --- BẮT ĐẦU PHẦN CHỈNH SỬA: Thêm Mã chuyến bay ---
     GtkWidget *row_logo = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
     GtkWidget *icon = gtk_image_new_from_icon_name("airplane-mode-symbolic", GTK_ICON_SIZE_DND);
+    
+    // Label Tên hãng (giữ nguyên)
     GtkWidget *lbl_name = gtk_label_new(flight.airplane_name);
     gtk_style_context_add_class(gtk_widget_get_style_context(lbl_name), "airline-label");
+
+    // [MỚI] Label Mã chuyến bay (Ví dụ: "| VN123")
+    char code_buffer[100];
+    snprintf(code_buffer, sizeof(code_buffer), "| %s", flight.flight_id);
+    GtkWidget *lbl_code = gtk_label_new(code_buffer);
+    
+    // Thêm style cho mã chuyến bay (dùng chung style 'airline-label' để đồng bộ font chữ)
+    gtk_style_context_add_class(gtk_widget_get_style_context(lbl_code), "airline-label");
+
+    // Đóng gói các widget vào row_logo
     gtk_box_pack_start(GTK_BOX(row_logo), icon, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(row_logo), lbl_name, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(row_logo), lbl_code, FALSE, FALSE, 5); // Thêm padding 5px để tách biệt
+    
     gtk_box_pack_start(GTK_BOX(left_box), row_logo, FALSE, FALSE, 0);
+    // --- KẾT THÚC PHẦN CHỈNH SỬA ---
 
     GtkWidget *row_time = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
     gtk_widget_set_margin_top(row_time, 15);

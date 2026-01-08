@@ -138,12 +138,25 @@ Create table announces (
     foreign key (flight_id) references flights(flight_id)
 );
 
-INSERT INTO announces (flight_id, content) 
+INSERT INTO announces (flight_id, content, created_at, updated_at) 
 VALUES 
-    ('VN001', 'Flight VN001 is ready for boarding.'),
-    ('VN002', 'Flight VN002 is delayed due to weather conditions.'),
-    ('VN003', 'Flight VN003 will depart in 30 minutes.'),
-    ('VN004', 'Flight VN004 is now boarding at gate A3.'),
-    ('VN005', 'Flight VN005 is delayed due to technical issues.'),
-    ('VN006', 'Flight VN006 has been canceled.'),
-    ('VN007', 'Flight VN007 is now boarding at gate B2.');
+    -- Flight VN001 bay lúc 17:00 ngày 13/12 -> Thông báo Boarding lúc 16:25
+    ('VN001', 'Flight VN001 is ready for boarding.', '2025-12-13 16:25:00', '2025-12-13 16:25:00'),
+
+    -- Flight VN002 bay lúc 16:00 ngày 15/12 -> Thông báo Delay lúc 14:00 (trước 2 tiếng)
+    ('VN002', 'Flight VN002 is delayed due to weather conditions.', '2025-12-15 14:00:00', '2025-12-15 14:00:00'),
+
+    -- Flight VN003 bay lúc 16:00 ngày 17/12 -> Thông báo khởi hành trong 30p lúc 15:30
+    ('VN003', 'Flight VN003 will depart in 30 minutes.', '2025-12-17 15:30:00', '2025-12-17 15:30:00'),
+
+    -- Flight VN004 bay lúc 17:00 ngày 14/12 -> Thông báo cửa A3 lúc 16:20
+    ('VN004', 'Flight VN004 is now boarding at gate A3.', '2025-12-14 16:20:00', '2025-12-14 16:20:00'),
+
+    -- Flight VN005 bay lúc 16:00 ngày 17/12 -> Thông báo lỗi kỹ thuật lúc 13:00
+    ('VN005', 'Flight VN005 is delayed due to technical issues.', '2025-12-17 13:00:00', '2025-12-17 13:00:00'),
+
+    -- Flight VN006 bay lúc 02:00 ngày 20/11 -> Thông báo Hủy lúc 20:00 ngày hôm trước (19/11)
+    ('VN006', 'Flight VN006 has been canceled.', '2025-11-19 20:00:00', '2025-11-19 20:00:00'),
+
+    -- Flight VN007 bay lúc 03:30 ngày 20/11 -> Thông báo cửa B2 lúc 02:50
+    ('VN007', 'Flight VN007 is now boarding at gate B2.', '2025-11-20 02:50:00', '2025-11-20 02:50:00');

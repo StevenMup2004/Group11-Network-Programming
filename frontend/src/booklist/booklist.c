@@ -138,51 +138,147 @@ void apply_booklist_css() {
 // ============================================================
 // PHẦN 3: LOGIC IN VÉ (PDF)
 // ============================================================
+// Hàm vẽ đường kẻ đứt (Dashed line) để trang trí
+static void draw_dashed_line(cairo_t *cr, double x1, double y1, double x2, double y2) {
+    cairo_save(cr);
+    const double dashed[] = {5.0};
+    cairo_set_dash(cr, dashed, 1, 0);
+    cairo_set_line_width(cr, 1.0);
+    cairo_set_source_rgb(cr, 0.7, 0.7, 0.7); // Màu xám nhạt
+    cairo_move_to(cr, x1, y1);
+    cairo_line_to(cr, x2, y2);
+    cairo_stroke(cr);
+    cairo_restore(cr);
+}
+
 static void draw_ticket_for_pdf(cairo_t *cr, double width, double height, const Ticket *ticket) {
+    char buffer[512];
+    char date_only[20], time_only[10];
+    split_date_time(ticket->departure_time, date_only, time_only);
+
+    // 1. NỀN VÉ
     cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
     cairo_rectangle(cr, 0, 0, width, height);
     cairo_fill(cr);
 
-    cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
-    cairo_set_line_width(cr, 2.0);
-    cairo_rectangle(cr, 20, 20, width - 40, height - 40);
-    cairo_stroke(cr);
+    // 2. HEADER
+    cairo_set_source_rgb(cr, 0.13, 0.23, 0.38); // Màu xanh #223A60
+    cairo_rectangle(cr, 0, 0, width, 70); // Tăng độ cao header chút
+    cairo_fill(cr);
 
+    // Text Header
+    cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
     cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
-    cairo_set_font_size(cr, 24);
-    cairo_move_to(cr, 50, 60);
-    cairo_show_text(cr, "FLIGHT TICKET");
+    cairo_set_font_size(cr, 28);
+    cairo_move_to(cr, 30, 45);
+    cairo_show_text(cr, "BOARDING PASS");
 
+    // Booking Ref
+    cairo_set_font_size(cr, 14);
+    snprintf(buffer, sizeof(buffer), "Ref: #%d", ticket->booking_id);
+    cairo_move_to(cr, width - 150, 45);
+    cairo_show_text(cr, buffer);
+
+    // Tên hãng bay (Dưới header)
+    cairo_set_source_rgb(cr, 0.2, 0.2, 0.2); 
     cairo_set_font_size(cr, 18);
-    cairo_move_to(cr, 50, 100);
+    cairo_move_to(cr, 30, 100);
     cairo_show_text(cr, ticket->airplane_name);
 
-    char buffer[512]; // FIX: Tăng size buffer
-    snprintf(buffer, sizeof(buffer), "From: %s", extract_middle_string(ticket->departure_airport));
-    cairo_move_to(cr, 50, 140);
-    cairo_show_text(cr, buffer);
-
-    snprintf(buffer, sizeof(buffer), "To: %s", extract_middle_string(ticket->arrival_airport));
-    cairo_move_to(cr, 50, 170);
-    cairo_show_text(cr, buffer);
-
-    snprintf(buffer, sizeof(buffer), "Date: %s", ticket->departure_time);
-    cairo_move_to(cr, 50, 200);
-    cairo_show_text(cr, buffer);
-
-    snprintf(buffer, sizeof(buffer), "Price: %s VND", format_number_with_separator(ticket->total_price, ','));
-    cairo_move_to(cr, 50, 230);
-    cairo_show_text(cr, buffer);
+    // --- PHẦN CHỈNH SỬA CHÍNH: FROM VÀ TO XẾP DỌC ---
     
-    snprintf(buffer, sizeof(buffer), "Booking ID: %d", ticket->booking_id);
-    cairo_move_to(cr, 400, 60);
+    // 3. FROM (Ở trên)
+    cairo_set_font_size(cr, 12);
+    cairo_set_source_rgb(cr, 0.5, 0.5, 0.5); // Màu xám
+    cairo_move_to(cr, 30, 135);
+    cairo_show_text(cr, "FROM");
+
+    cairo_set_font_size(cr, 30); // Chữ to
+    cairo_set_source_rgb(cr, 0.13, 0.23, 0.38); // Màu xanh
+    cairo_move_to(cr, 30, 165);
+    cairo_show_text(cr, extract_middle_string(ticket->departure_airport));
+
+    // 4. TO (Xuống dòng dưới)
+    cairo_set_font_size(cr, 12);
+    cairo_set_source_rgb(cr, 0.5, 0.5, 0.5);
+    cairo_move_to(cr, 30, 205); // Y = 205 (Cách phần trên 40px)
+    cairo_show_text(cr, "TO");
+
+    cairo_set_font_size(cr, 30);
+    cairo_set_source_rgb(cr, 0.13, 0.23, 0.38);
+    cairo_move_to(cr, 30, 235);
+    cairo_show_text(cr, extract_middle_string(ticket->arrival_airport));
+
+    // 5. KHỐI GHẾ (SEAT) - Bên phải, nằm giữa không gian dọc của From/To
+    // Vẽ khung
+    cairo_set_source_rgb(cr, 0.95, 0.95, 0.95);
+    cairo_rectangle(cr, 400, 120, 160, 100); // Box to hơn chút
+    cairo_fill(cr);
+
+    // Label SEAT
+    cairo_set_source_rgb(cr, 0.5, 0.5, 0.5);
+    cairo_set_font_size(cr, 14);
+    cairo_move_to(cr, 420, 150);
+    cairo_show_text(cr, "SEAT NUMBER");
+
+    // Số ghế
+    cairo_set_source_rgb(cr, 0.8, 0.2, 0.2); // Màu đỏ
+    cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+    cairo_set_font_size(cr, 40); 
+    cairo_move_to(cr, 420, 195);
+    cairo_show_text(cr, ticket->list_ticket);
+
+    // 6. THÔNG TIN CHI TIẾT (Flight, Date, Time) - Dời xuống dưới cùng
+    double row_y = 290; // Vị trí Y mới thấp hơn
+    
+    // Cột Flight
+    cairo_set_font_size(cr, 10);
+    cairo_set_source_rgb(cr, 0.5, 0.5, 0.5);
+    cairo_move_to(cr, 30, row_y);
+    cairo_show_text(cr, "FLIGHT");
+    cairo_set_font_size(cr, 16);
+    cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
+    cairo_move_to(cr, 30, row_y + 20);
+    cairo_show_text(cr, ticket->flight_id);
+
+    // Cột Date
+    cairo_set_font_size(cr, 10);
+    cairo_set_source_rgb(cr, 0.5, 0.5, 0.5);
+    cairo_move_to(cr, 150, row_y);
+    cairo_show_text(cr, "DATE");
+    cairo_set_font_size(cr, 16);
+    cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
+    cairo_move_to(cr, 150, row_y + 20);
+    cairo_show_text(cr, date_only);
+
+    // Cột Time
+    cairo_set_font_size(cr, 10);
+    cairo_set_source_rgb(cr, 0.5, 0.5, 0.5);
+    cairo_move_to(cr, 300, row_y);
+    cairo_show_text(cr, "TIME");
+    cairo_set_font_size(cr, 16);
+    cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
+    cairo_move_to(cr, 300, row_y + 20);
+    cairo_show_text(cr, time_only);
+
+    // 7. FOOTER (Giá tiền)
+    draw_dashed_line(cr, 0, height - 60, width, height - 60);
+
+    cairo_set_source_rgb(cr, 0.2, 0.6, 0.2); // Xanh lá
+    cairo_set_font_size(cr, 20);
+    snprintf(buffer, sizeof(buffer), "TOTAL: %s VND", format_number_with_separator(ticket->total_price, ','));
+    cairo_move_to(cr, 30, height - 25);
     cairo_show_text(cr, buffer);
 }
 
 static void save_ticket_as_pdf(const char *filename, const Ticket *ticket) {
-    cairo_surface_t *pdf_surface = cairo_pdf_surface_create(filename, 600, 300);
+    // Sửa 300 thành 400 để vé dài hơn, đủ chỗ chứa dòng TO mới
+    cairo_surface_t *pdf_surface = cairo_pdf_surface_create(filename, 600, 400); 
     cairo_t *pdf_cr = cairo_create(pdf_surface);
-    draw_ticket_for_pdf(pdf_cr, 600, 300, ticket);
+    
+    // Cũng sửa 300 thành 400 ở đây
+    draw_ticket_for_pdf(pdf_cr, 600, 400, ticket); 
+    
     cairo_destroy(pdf_cr);
     cairo_surface_destroy(pdf_surface);
 }
@@ -307,18 +403,30 @@ GtkWidget* create_booked_card(Ticket *ticket) {
     // Row Top
     GtkWidget *row_top = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
     GtkWidget *icon = gtk_image_new_from_icon_name("airplane-mode-symbolic", GTK_ICON_SIZE_DND);
+    
+    // Tên hãng
     GtkWidget *lbl_name = gtk_label_new(ticket->airplane_name);
     gtk_style_context_add_class(gtk_widget_get_style_context(lbl_name), "airline-label");
     
+    // [MỚI] Mã chuyến bay
+    char flight_code_buff[100];
+    snprintf(flight_code_buff, sizeof(flight_code_buff), "| %s", ticket->flight_id);
+    GtkWidget *lbl_flight_code = gtk_label_new(flight_code_buff);
+    gtk_style_context_add_class(gtk_widget_get_style_context(lbl_flight_code), "airline-label");
+
+    // Booking ID
     char id_buff[50];
     snprintf(id_buff, sizeof(id_buff), "Booking ID: #%d", ticket->booking_id);
     GtkWidget *lbl_id = gtk_label_new(id_buff);
     GdkRGBA grey; gdk_rgba_parse(&grey, "#7f8c8d");
     gtk_widget_override_color(lbl_id, GTK_STATE_FLAG_NORMAL, &grey);
 
+    // Đóng gói hàng trên cùng
     gtk_box_pack_start(GTK_BOX(row_top), icon, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(row_top), lbl_name, FALSE, FALSE, 5);
+    gtk_box_pack_start(GTK_BOX(row_top), lbl_flight_code, FALSE, FALSE, 5); // Đã thêm mã chuyến bay
     gtk_box_pack_start(GTK_BOX(row_top), lbl_id, FALSE, FALSE, 20);
+    
     gtk_box_pack_start(GTK_BOX(left_box), row_top, FALSE, FALSE, 0);
 
     // Row Time
@@ -360,7 +468,7 @@ GtkWidget* create_booked_card(Ticket *ticket) {
     gtk_box_pack_start(GTK_BOX(left_box), row_time, FALSE, FALSE, 0);
     
     // Seats
-    char seat_buff[512]; // FIX: Tăng size buffer
+    char seat_buff[512]; 
     snprintf(seat_buff, sizeof(seat_buff), "Seats: %s", ticket->list_ticket);
     GtkWidget *lbl_seats = gtk_label_new(seat_buff);
     gtk_style_context_add_class(gtk_widget_get_style_context(lbl_seats), "seat-info");

@@ -157,9 +157,9 @@ GtkWidget* create_header(GtkWidget **buttons, GtkWidget *parent_container) {
     gtk_widget_set_margin_end(header, 280);
     gtk_widget_set_margin_bottom(header, 10);
 
-    logo = gtk_image_new_from_file("../assets/images/logo.png");
-    gtk_box_pack_start(GTK_BOX(header), logo, FALSE, FALSE, 10);
-    gtk_widget_set_margin_end(logo, 250);
+    // logo = gtk_image_new_from_file("../assets/images/logo.png");
+    // gtk_box_pack_start(GTK_BOX(header), logo, FALSE, FALSE, 10);
+    //gtk_widget_set_margin_end(logo, 250);
 
     menu_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
     gtk_box_set_homogeneous(GTK_BOX(menu_box), TRUE);
