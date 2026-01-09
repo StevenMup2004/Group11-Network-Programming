@@ -86,7 +86,7 @@ Communication between the client and server is performed via TCP sockets using a
 - Networking: **TCP Socket Programming**
 - Architecture: **Client–Server Model**
 - Database: Relational database for persistent storage
-- User Interface: Graphical User Interface (GUI)
+- User Interface: GTK
 - External Services: Email service for electronic ticket delivery
 
 ---
