@@ -1,7 +1,6 @@
 # Online Airline Ticket Booking System
 
-## Project Title
-**Design and Implementation of an Online Airline Ticket Booking System**
+
 
 ---
 
